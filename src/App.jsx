@@ -17,7 +17,8 @@ import {
   CheckCircle,
   LogOut,
   LogIn,
-  User
+  User,
+  ExternalLink
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -64,6 +65,7 @@ export default function App() {
   const [newTaskText, setNewTaskText] = useState('');
   const [showAdminView, setShowAdminView] = useState(false);
   const [error, setError] = useState(null);
+  const [errorCode, setErrorCode] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
   // Estado local para evitar o pulo do cursor no textarea
@@ -107,7 +109,8 @@ export default function App() {
     }, (err) => {
       console.error("Erro na sincronização Firestore:", err);
       if (err.code === 'permission-denied') {
-        setError("Permissão negada no Firestore. Verifica se configuraste as regras do banco de dados.");
+        setError("Permissão negada no Firestore. Verifique se configurou as regras do banco de dados.");
+        setErrorCode(err.code);
       }
     });
 
@@ -127,10 +130,16 @@ export default function App() {
   const handleLogin = async () => {
     try {
       setError(null);
+      setErrorCode(null);
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       console.error("Erro no login:", err);
-      setError("Falha ao entrar com Google. Verifique se os popups estão permitidos.");
+      setErrorCode(err.code);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError("Este domínio não está autorizado no seu projeto Firebase.");
+      } else {
+        setError(`Falha ao entrar com Google: ${err.message}`);
+      }
     }
   };
 
@@ -255,8 +264,25 @@ export default function App() {
           </p>
           
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm mb-6 border border-red-100 flex items-center gap-2">
-              <AlertCircle size={16} /> {error}
+            <div className="bg-red-50 text-red-600 p-6 rounded-2xl text-sm mb-10 border border-red-100 text-left">
+              <div className="flex items-center gap-2 font-bold mb-2">
+                <AlertCircle size={18} /> 
+                <span>Erro: {errorCode}</span>
+              </div>
+              <p className="mb-4">{error}</p>
+              
+              {errorCode === 'auth/unauthorized-domain' && (
+                <div className="bg-white/50 p-4 rounded-xl border border-red-200">
+                  <p className="font-bold text-xs uppercase tracking-wider mb-2">Como resolver:</p>
+                  <ol className="list-decimal pl-4 space-y-1 text-xs text-red-700">
+                    <li>Vá para o <a href="https://console.firebase.google.com/" target="_blank" className="font-bold underline inline-flex items-center gap-1">Firebase Console <ExternalLink size={10} /></a></li>
+                    <li>Navegue até <strong>Authentication</strong></li>
+                    <li>Clique na aba <strong>Settings</strong></li>
+                    <li>Selecione <strong>Authorized domains</strong></li>
+                    <li>Adicione o domínio <strong>{window.location.hostname}</strong></li>
+                  </ol>
+                </div>
+              )}
             </div>
           )}
 

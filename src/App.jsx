@@ -14,7 +14,10 @@ import {
   Cloud,
   Database,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  LogOut,
+  LogIn,
+  User
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -28,8 +31,10 @@ import {
 } from 'firebase/firestore';
 import { 
   getAuth, 
-  signInAnonymously, 
-  onAuthStateChanged 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged,
+  signOut
 } from 'firebase/auth';
 
 // --- CONFIGURAÇÃO DO TEU FIREBASE ---
@@ -46,6 +51,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
 export default function App() {
@@ -74,32 +80,21 @@ export default function App() {
     }
   }, []);
 
-  // 1. Autenticação
+  // 1. Monitoramento do Estado de Autenticação
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        try {
-          await signInAnonymously(auth);
-        } catch (err) {
-          console.error("Erro na autenticação:", err.code);
-          if (err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed') {
-            setError("O login Anónimo não está ativado no Firebase. Vai a 'Authentication' -> 'Sign-in method' e ativa o fornecedor 'Anónimo'.");
-          } else {
-            setError(`Erro de Autenticação: ${err.message}`);
-          }
-          setIsLoadingAuth(false);
-        }
-      } else {
-        setUser(currentUser);
-        setIsLoadingAuth(false);
-      }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsLoadingAuth(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // 2. Sincronização Firestore
+  // 2. Sincronização Firestore (Baseada no UID do Usuário Logado)
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setFiles([]);
+      return;
+    }
 
     const filesRef = collection(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files');
     
@@ -112,7 +107,7 @@ export default function App() {
     }, (err) => {
       console.error("Erro na sincronização Firestore:", err);
       if (err.code === 'permission-denied') {
-        setError("Permissão negada no Firestore. Verifica se criaste o banco de dados em 'Modo de Teste'.");
+        setError("Permissão negada no Firestore. Verifica se configuraste as regras do banco de dados.");
       }
     });
 
@@ -128,6 +123,27 @@ export default function App() {
     }
   }, [activeFileId, activeFile?.content]);
 
+  // Ações de Autenticação
+  const handleLogin = async () => {
+    try {
+      setError(null);
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error("Erro no login:", err);
+      setError("Falha ao entrar com Google. Verifique se os popups estão permitidos.");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setActiveFileId(null);
+    } catch (err) {
+      console.error("Erro no logout:", err);
+    }
+  };
+
+  // Funções de Gerenciamento de Arquivos
   const createNewFile = async (name, content = "") => {
     if (!user || !name) return;
     const fileId = crypto.randomUUID();
@@ -139,7 +155,8 @@ export default function App() {
         content: content,
         tasks: [],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        ownerEmail: user.email
       });
       setActiveFileId(fileId);
       setShowNewFileDialog(false);
@@ -212,25 +229,46 @@ export default function App() {
 
   const completedLists = files.filter(f => f.tasks && f.tasks.length > 0 && f.tasks.every(t => t.completed));
 
-  if (error) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 p-6 text-center font-sans">
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl border border-red-100 max-w-lg">
-          <AlertCircle className="text-red-500 mx-auto mb-6" size={48} />
-          <h2 className="text-2xl font-black text-slate-800 mb-4">Configuração Necessária</h2>
-          <p className="text-red-700 text-sm mb-6">{error}</p>
-          <button onClick={() => window.location.reload()} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg">Recarregar</button>
-        </div>
-      </div>
-    );
-  }
-
+  // Tela de Carregamento Inicial
   if (isLoadingAuth) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-slate-50 font-sans">
         <div className="flex flex-col items-center gap-4 text-indigo-600">
           <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-          <div className="font-bold tracking-widest animate-pulse uppercase">Sincronizando...</div>
+          <div className="font-bold tracking-widest animate-pulse uppercase">Iniciando...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Tela de Login (Landing Page)
+  if (!user) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-slate-50 font-sans p-6">
+        <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100">
+          <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
+            <FileText size={40} className="text-white" />
+          </div>
+          <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">TXT Manager</h1>
+          <p className="text-slate-500 mb-10 leading-relaxed">
+            Organize suas notas e tarefas em qualquer lugar. Seus arquivos são salvos na nuvem com segurança.
+          </p>
+          
+          {error && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm mb-6 border border-red-100 flex items-center gap-2">
+              <AlertCircle size={16} /> {error}
+            </div>
+          )}
+
+          <button 
+            onClick={handleLogin}
+            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-indigo-600 text-slate-700 py-4 px-6 rounded-2xl font-bold transition-all shadow-sm hover:shadow-indigo-50 active:scale-95 group"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" className="w-6 h-6" />
+            <span>Entrar com Google</span>
+          </button>
+          
+          <p className="mt-8 text-[10px] text-slate-400 uppercase font-bold tracking-widest">Acesso Multi-usuário Seguro</p>
         </div>
       </div>
     );
@@ -238,19 +276,37 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full bg-slate-50 text-slate-900 font-sans overflow-hidden">
+      {/* Barra Lateral */}
       <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm">
-        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-          <h1 className="text-xl font-bold flex items-center gap-2 text-indigo-600"><FileText size={24} /> TXT Manager</h1>
-          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Cloud Sync Ativo</p>
+        {/* Perfil do Usuário */}
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-4">
+          <div className="relative group">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt={user.displayName} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
+            ) : (
+              <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600"><User size={20} /></div>
+            )}
+            <button 
+              onClick={handleLogout}
+              className="absolute -top-1 -right-1 bg-white p-1 rounded-full shadow-md text-slate-400 hover:text-red-500 hover:scale-110 transition-all"
+              title="Sair"
+            >
+              <LogOut size={12} />
+            </button>
+          </div>
+          <div className="flex flex-col overflow-hidden">
+            <h1 className="text-sm font-bold text-slate-800 truncate">{user.displayName || 'Usuário'}</h1>
+            <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+          </div>
         </div>
 
         <div className="p-4 flex flex-col gap-2">
-          <button onClick={() => { setShowNewFileDialog(true); setShowAdminView(false); }} className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl transition-all shadow-md active:scale-95"><Plus size={18} /> Novo Documento</button>
-          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 py-2.5 rounded-xl cursor-pointer hover:bg-slate-50 transition-all"><Upload size={18} /> Importar .txt<input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" /></label>
+          <button onClick={() => { setShowNewFileDialog(true); setShowAdminView(false); }} className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl transition-all shadow-md active:scale-95 font-bold"><Plus size={18} /> Novo Documento</button>
+          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 py-2.5 rounded-xl cursor-pointer hover:bg-slate-50 transition-all text-sm font-medium"><Upload size={18} /> Importar .txt<input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" /></label>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
-          <div className="text-xs font-bold text-slate-400 px-2 py-3 uppercase tracking-wider">Meus Ficheiros</div>
+          <div className="text-[10px] font-black text-slate-400 px-2 py-3 uppercase tracking-widest">Meus Ficheiros</div>
           {files.map(file => {
             const progress = calculateProgress(file);
             return (
@@ -266,7 +322,6 @@ export default function App() {
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); deleteFile(file.id); }} className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all"><Trash2 size={14} /></button>
                 </div>
-                {/* Barra de progresso miniatura na sidebar */}
                 {file.tasks && file.tasks.length > 0 && (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
@@ -284,10 +339,6 @@ export default function App() {
           {files.length === 0 && <p className="text-center text-xs text-slate-300 py-10 italic">Nenhum ficheiro encontrado.</p>}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
-          <button onClick={() => setShowAdminView(!showAdminView)} className={`w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition-all ${showAdminView ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}><Database size={14} /> {showAdminView ? 'Fechar Modo Dados' : 'Explorar Firestore'}</button>
-        </div>
-
         <div className="p-4 border-t border-slate-100 bg-slate-50/30">
           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-tighter"><CheckCircle2 size={14} /> Concluídos ({completedLists.length})</div>
           <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
@@ -297,20 +348,13 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col bg-white overflow-hidden">
-        {showAdminView ? (
-          <div className="flex-1 flex flex-col p-8 bg-slate-900 text-slate-300 overflow-hidden font-sans">
-            <h2 className="text-xl font-bold text-white mb-4">Dados Brutos (Firestore)</h2>
-            <div className="flex-1 bg-black/40 rounded-2xl p-6 overflow-y-auto font-mono text-xs custom-scrollbar">
-              <pre className="text-amber-200">{JSON.stringify(files, null, 2)}</pre>
-            </div>
-          </div>
-        ) : activeFile ? (
+        {activeFile ? (
           <>
             <header className="h-20 border-b border-slate-100 px-6 flex items-center justify-between shrink-0 bg-white shadow-sm z-10">
               <div className="flex flex-col">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-slate-800">{activeFile.name}</h2>
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest">Online</span></div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest">Sincronizado</span></div>
                 </div>
                 {activeFile.tasks && activeFile.tasks.length > 0 && (
                   <div className="flex items-center gap-3 mt-1">
@@ -369,8 +413,8 @@ export default function App() {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 font-sans">
             <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-slate-200/50"><Cloud size={48} className="text-indigo-100" /></div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Pronto a Começar?</h2>
-            <p className="max-w-md text-sm text-slate-500 leading-relaxed">Seleciona um ficheiro à esquerda para gerir as tuas notas e tarefas sincronizadas na nuvem.</p>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Seus arquivos em {user.displayName}</h2>
+            <p className="max-w-md text-sm text-slate-500 leading-relaxed">Selecione um ficheiro à esquerda ou crie um novo. Suas notas são exclusivas para sua conta do Google.</p>
           </div>
         )}
       </main>
@@ -382,7 +426,7 @@ export default function App() {
             <p className="text-sm text-slate-500 mb-8 text-center leading-relaxed">Nome do documento para sincronizar.</p>
             <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none focus:ring-4 focus:ring-indigo-100 mb-8 transition-all" placeholder="Ex: Metas_2025.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
             <div className="flex gap-4">
-              <button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-100 rounded-2xl transition-all">Cancelar</button>
+              <button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
               <button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 active:scale-95 transition-all">Criar Ficheiro</button>
             </div>
           </div>

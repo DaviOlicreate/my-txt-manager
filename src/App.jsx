@@ -195,7 +195,7 @@ export default function App() {
 
   if (error) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center font-sans">
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 p-6 text-center font-sans">
         <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl border border-red-100 max-w-lg">
           <AlertCircle className="text-red-500 mx-auto mb-6" size={48} />
           <h2 className="text-2xl font-black text-slate-800 mb-4">Configuração Necessária</h2>
@@ -208,7 +208,7 @@ export default function App() {
 
   if (isLoadingAuth) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 font-sans">
+      <div className="h-screen w-full flex items-center justify-center bg-slate-50 font-sans">
         <div className="flex flex-col items-center gap-4 text-indigo-600">
           <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
           <div className="font-bold tracking-widest animate-pulse uppercase">Sincronizando...</div>
@@ -218,7 +218,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
+    <div className="flex h-screen w-full bg-slate-50 text-slate-900 font-sans overflow-hidden">
       <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm">
         <div className="p-6 border-b border-slate-100 bg-slate-50/50">
           <h1 className="text-xl font-bold flex items-center gap-2 text-indigo-600"><FileText size={24} /> TXT Manager</h1>
@@ -323,6 +323,14 @@ export default function App() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
+        /* Reset para preencher a tela toda */
+        html, body, #root {
+          height: 100% !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden;
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
       `}} />

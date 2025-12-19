@@ -55,6 +55,17 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
+// Componente do Ícone do Google em SVG (Garante que sempre apareça)
+const GoogleIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 48 48">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    <path fill="none" d="M0 0h48v48H0z"/>
+  </svg>
+);
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [files, setFiles] = useState([]);
@@ -241,10 +252,10 @@ export default function App() {
   // Tela de Carregamento Inicial
   if (isLoadingAuth) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-slate-50 font-sans">
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-50 font-sans fixed inset-0">
         <div className="flex flex-col items-center gap-4 text-indigo-600">
           <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-          <div className="font-bold tracking-widest animate-pulse uppercase">Iniciando...</div>
+          <div className="font-bold tracking-widest animate-pulse uppercase text-sm">Iniciando...</div>
         </div>
       </div>
     );
@@ -253,33 +264,32 @@ export default function App() {
   // Tela de Login (Landing Page)
   if (!user) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-slate-50 font-sans p-6">
-        <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100">
-          <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
-            <FileText size={40} className="text-white" />
+      <div className="h-screen w-screen bg-slate-50 font-sans flex items-center justify-center p-6 fixed inset-0">
+        <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500">
+          <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
+            <FileText size={48} className="text-white" />
           </div>
           <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">TXT Manager</h1>
-          <p className="text-slate-500 mb-10 leading-relaxed">
-            Organize suas notas e tarefas em qualquer lugar. Seus arquivos são salvos na nuvem com segurança.
+          <p className="text-slate-500 mb-10 leading-relaxed text-lg">
+            Organize suas notas e tarefas em qualquer lugar com segurança total.
           </p>
           
           {error && (
-            <div className="bg-red-50 text-red-600 p-6 rounded-2xl text-sm mb-10 border border-red-100 text-left">
+            <div className="bg-red-50 text-red-600 p-6 rounded-3xl text-sm mb-10 border border-red-100 text-left">
               <div className="flex items-center gap-2 font-bold mb-2">
                 <AlertCircle size={18} /> 
-                <span>Erro: {errorCode}</span>
+                <span>Configuração Necessária</span>
               </div>
-              <p className="mb-4">{error}</p>
+              <p className="mb-4 text-xs">{error}</p>
               
               {errorCode === 'auth/unauthorized-domain' && (
-                <div className="bg-white/50 p-4 rounded-xl border border-red-200">
-                  <p className="font-bold text-xs uppercase tracking-wider mb-2">Como resolver:</p>
-                  <ol className="list-decimal pl-4 space-y-1 text-xs text-red-700">
+                <div className="bg-white/50 p-4 rounded-2xl border border-red-200">
+                  <p className="font-bold text-[10px] uppercase tracking-wider mb-2">Como resolver agora:</p>
+                  <ol className="list-decimal pl-4 space-y-1 text-[10px] text-red-700">
                     <li>Vá para o <a href="https://console.firebase.google.com/" target="_blank" className="font-bold underline inline-flex items-center gap-1">Firebase Console <ExternalLink size={10} /></a></li>
                     <li>Navegue até <strong>Authentication</strong></li>
-                    <li>Clique na aba <strong>Settings</strong></li>
-                    <li>Selecione <strong>Authorized domains</strong></li>
-                    <li>Adicione o domínio <strong>{window.location.hostname}</strong></li>
+                    <li>Clique na aba <strong>Settings</strong> e depois <strong>Authorized domains</strong></li>
+                    <li>Adicione o domínio: <strong>{window.location.hostname}</strong></li>
                   </ol>
                 </div>
               )}
@@ -288,22 +298,22 @@ export default function App() {
 
           <button 
             onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-indigo-600 text-slate-700 py-4 px-6 rounded-2xl font-bold transition-all shadow-sm hover:shadow-indigo-50 active:scale-95 group"
+            className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 hover:border-indigo-600 text-slate-700 py-4 px-6 rounded-2xl font-bold transition-all shadow-md hover:shadow-indigo-50 active:scale-95 group"
           >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" className="w-6 h-6" />
-            <span>Entrar com Google</span>
+            <GoogleIcon />
+            <span>Entrar com conta Google</span>
           </button>
           
-          <p className="mt-8 text-[10px] text-slate-400 uppercase font-bold tracking-widest">Acesso Multi-usuário Seguro</p>
+          <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Acesso Multi-usuário</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 text-slate-900 font-sans overflow-hidden">
+    <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
       {/* Barra Lateral */}
-      <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm">
+      <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm z-20">
         {/* Perfil do Usuário */}
         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-4">
           <div className="relative group">
@@ -314,7 +324,7 @@ export default function App() {
             )}
             <button 
               onClick={handleLogout}
-              className="absolute -top-1 -right-1 bg-white p-1 rounded-full shadow-md text-slate-400 hover:text-red-500 hover:scale-110 transition-all"
+              className="absolute -top-1 -right-1 bg-white p-1.5 rounded-full shadow-md text-slate-400 hover:text-red-500 hover:scale-110 transition-all border border-slate-50"
               title="Sair"
             >
               <LogOut size={12} />
@@ -322,7 +332,7 @@ export default function App() {
           </div>
           <div className="flex flex-col overflow-hidden">
             <h1 className="text-sm font-bold text-slate-800 truncate">{user.displayName || 'Usuário'}</h1>
-            <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+            <p className="text-[10px] text-slate-400 truncate uppercase font-bold tracking-tight">{user.email}</p>
           </div>
         </div>
 
@@ -373,7 +383,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col bg-white overflow-hidden">
+      <main className="flex-1 flex flex-col bg-white overflow-hidden relative">
         {activeFile ? (
           <>
             <header className="h-20 border-b border-slate-100 px-6 flex items-center justify-between shrink-0 bg-white shadow-sm z-10">
@@ -394,14 +404,14 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${isEditing ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16} /> Gravar</> : <><Edit3 size={16} /> Editar Texto</>}</button>
+              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16} /> Gravar</> : <><Edit3 size={16} /> Editar Texto</>}</button>
             </header>
 
             <div className="flex-1 flex overflow-hidden">
               <div className="flex-1 flex flex-col p-6 overflow-hidden border-r border-slate-50">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Documento</h3>
-                  {isEditing && <span className="text-[10px] text-amber-500 font-bold animate-pulse">MODO DE EDIÇÃO ATIVO</span>}
+                  {isEditing && <span className="text-[10px] text-amber-500 font-bold animate-pulse tracking-widest">MODO DE EDIÇÃO ATIVO</span>}
                 </div>
                 {isEditing ? (
                   <textarea 
@@ -437,19 +447,19 @@ export default function App() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 font-sans">
-            <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-slate-200/50"><Cloud size={48} className="text-indigo-100" /></div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Seus arquivos em {user.displayName}</h2>
-            <p className="max-w-md text-sm text-slate-500 leading-relaxed">Selecione um ficheiro à esquerda ou crie um novo. Suas notas são exclusivas para sua conta do Google.</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 font-sans h-full w-full">
+            <div className="w-32 h-32 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 shadow-xl shadow-slate-200/50 rotate-6"><Cloud size={64} className="text-indigo-200" /></div>
+            <h2 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">Bem-vindo, {user.displayName?.split(' ')[0]}</h2>
+            <p className="max-w-md text-slate-500 leading-relaxed text-lg">Suas notas e tarefas estão sincronizadas e prontas para uso. Selecione um ficheiro ao lado para começar.</p>
           </div>
         )}
       </main>
 
       {showNewFileDialog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans">
-          <div className="bg-white rounded-[2rem] p-10 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-100">
             <h3 className="text-2xl font-black text-slate-800 mb-2 text-center">Novo TXT</h3>
-            <p className="text-sm text-slate-500 mb-8 text-center leading-relaxed">Nome do documento para sincronizar.</p>
+            <p className="text-sm text-slate-500 mb-8 text-center leading-relaxed">Nomeie seu novo documento na nuvem.</p>
             <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none focus:ring-4 focus:ring-indigo-100 mb-8 transition-all" placeholder="Ex: Metas_2025.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
             <div className="flex gap-4">
               <button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
@@ -460,15 +470,21 @@ export default function App() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
+        /* Reset Radical para preenchimento total do viewport */
         html, body, #root {
-          height: 100% !important;
-          width: 100% !important;
+          height: 100vh !important;
+          width: 100vw !important;
           margin: 0 !important;
           padding: 0 !important;
-          overflow: hidden;
+          overflow: hidden !important;
+          position: fixed !important;
+          top: 0;
+          left: 0;
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
       `}} />
     </div>
   );

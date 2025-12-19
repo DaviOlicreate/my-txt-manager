@@ -31,7 +31,8 @@ import {
   onAuthStateChanged 
 } from 'firebase/auth';
 
-// --- CONFIGURAÇÃO DO SEU FIREBASE ---
+// --- CONFIGURAÇÃO DO TEU FIREBASE ---
+// Estes dados são os que aparecem no teu painel do Firebase Console
 const firebaseConfig = {
   apiKey: "AIzaSyAvOICZLA1RFRDssU9XSRJhxVEDfp-TavA",
   authDomain: "produtividade-txt.firebaseapp.com",
@@ -45,7 +46,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const PROJECT_ID = 'my-txt-manager'; // ID fixo para sua organização no banco
+const PROJECT_ID = 'my-txt-manager'; // Identificador para a tua organização de dados
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -57,8 +58,9 @@ export default function App() {
   const [newTaskText, setNewTaskText] = useState('');
   const [showAdminView, setShowAdminView] = useState(false);
   const [error, setError] = useState(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
-  // 1. Autenticação (Entra automaticamente de forma anônima)
+  // 1. Autenticação (Login anónimo automático)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
@@ -67,13 +69,15 @@ export default function App() {
         } catch (err) {
           console.error("Erro na autenticação:", err.code);
           if (err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed') {
-            setError("O login Anónimo não está ativado no Firebase. Vá a 'Authentication' -> 'Sign-in method' e ative 'Anónimo'.");
+            setError("O login Anónimo não está ativado no Firebase. Vai a 'Authentication' &rarr; 'Sign-in method' e ativa o fornecedor 'Anónimo'.");
           } else {
             setError(`Erro de Autenticação: ${err.message}`);
           }
+          setIsLoadingAuth(false);
         }
       } else {
         setUser(currentUser);
+        setIsLoadingAuth(false);
       }
     });
     return () => unsubscribe();
@@ -83,7 +87,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    // Caminho onde os dados serão salvos no banco
+    // Caminho onde os dados serão guardados
     const filesRef = collection(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files');
     
     const unsubscribe = onSnapshot(filesRef, (snapshot) => {
@@ -91,12 +95,12 @@ export default function App() {
         id: doc.id,
         ...doc.data()
       }));
-      // Ordena por data de atualização (mais novos primeiro)
+      // Ordena por data de atualização (mais recentes primeiro)
       setFiles(filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
     }, (err) => {
-      console.error("Erro na sincronização:", err);
+      console.error("Erro na sincronização Firestore:", err);
       if (err.code === 'permission-denied') {
-        setError("Permissão negada no Firestore. Verifique se criou o banco de dados em 'Modo de Teste' ou se as regras permitem acesso.");
+        setError("Permissão negada no Firestore. Verifica se criaste o banco de dados em 'Modo de Teste' ou se as regras permitem acesso.");
       }
     });
 
@@ -105,26 +109,29 @@ export default function App() {
 
   const activeFile = files.find(f => f.id === activeFileId);
 
-  // Criar novo arquivo
+  // Criar novo ficheiro
   const createNewFile = async (name, content = "") => {
     if (!user || !name) return;
     const fileId = crypto.randomUUID();
     const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fileId);
     
-    await setDoc(fileRef, {
-      name: name.endsWith('.txt') ? name : `${name}.txt`,
-      content: content,
-      tasks: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    });
-    
-    setActiveFileId(fileId);
-    setShowNewFileDialog(false);
-    setNewFileName('');
+    try {
+      await setDoc(fileRef, {
+        name: name.endsWith('.txt') ? name : `${name}.txt`,
+        content: content,
+        tasks: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      setActiveFileId(fileId);
+      setShowNewFileDialog(false);
+      setNewFileName('');
+    } catch (err) {
+      console.error("Erro ao criar ficheiro:", err);
+    }
   };
 
-  // Upload de arquivo local
+  // Upload de ficheiro local
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -140,21 +147,29 @@ export default function App() {
   const updateFileContent = async (content) => {
     if (!user || !activeFileId) return;
     const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
-    await updateDoc(fileRef, { 
-      content, 
-      updatedAt: Date.now() 
-    });
+    try {
+      await updateDoc(fileRef, { 
+        content, 
+        updatedAt: Date.now() 
+      });
+    } catch (err) {
+      console.error("Erro ao atualizar conteúdo:", err);
+    }
   };
 
-  // Excluir arquivo
+  // Eliminar ficheiro
   const deleteFile = async (id) => {
     if (!user) return;
     const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id);
-    await deleteDoc(fileRef);
-    if (activeFileId === id) setActiveFileId(null);
+    try {
+      await deleteDoc(fileRef);
+      if (activeFileId === id) setActiveFileId(null);
+    } catch (err) {
+      console.error("Erro ao eliminar ficheiro:", err);
+    }
   };
 
-  // Gerenciar Tarefas (Checklist)
+  // Gerir Tarefas (Checklist)
   const addTask = async () => {
     if (!newTaskText.trim() || !activeFile) return;
     const updatedTasks = [
@@ -184,7 +199,7 @@ export default function App() {
 
   const completedLists = files.filter(f => f.tasks.length > 0 && f.tasks.every(t => t.completed));
 
-  // Renderização de Erro Crítico
+  // Ecrã de Erro Crítico
   if (error) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
@@ -197,10 +212,10 @@ export default function App() {
             <p className="text-red-700 text-sm leading-relaxed font-medium">{error}</p>
           </div>
           <ol className="text-left text-xs text-slate-500 space-y-2 mb-8 list-decimal pl-4">
-            <li>Aceda ao Firebase Console</li>
-            <li>Vá a <strong>Build {'>'} Authentication</strong></li>
-            <li>Ative o provedor <strong>Anonymous</strong></li>
-            <li>Vá a <strong>Build {'>'} Firestore Database</strong> e crie o banco de dados em "Modo de Teste".</li>
+            <li>Acede ao Firebase Console</li>
+            <li>Vai a <strong>Build &gt; Authentication</strong></li>
+            <li>Ativa o fornecedor <strong>Anónimo (Anonymous)</strong></li>
+            <li>Vai a <strong>Build &gt; Firestore Database</strong> e cria o banco em "Modo de Teste".</li>
           </ol>
           <button 
             onClick={() => window.location.reload()} 
@@ -213,11 +228,13 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  // Ecrã de Carregamento
+  if (isLoadingAuth) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-indigo-600 animate-pulse font-medium flex items-center gap-2 text-lg">
-          <Cloud size={24} /> Conectando ao Banco de Dados...
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+          <div className="text-indigo-600 font-bold tracking-widest animate-pulse">LIGANDO AO CLOUD...</div>
         </div>
       </div>
     );
@@ -232,7 +249,7 @@ export default function App() {
             <FileText size={24} />
             TXT Manager
           </h1>
-          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Cloud Sync Ativo</p>
+          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Sincronização Ativa</p>
         </div>
 
         <div className="p-4 flex flex-col gap-2">
@@ -250,7 +267,7 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
-          <div className="text-xs font-bold text-slate-400 px-2 py-3 uppercase tracking-wider">Meus Arquivos</div>
+          <div className="text-xs font-bold text-slate-400 px-2 py-3 uppercase tracking-wider">Meus Ficheiros</div>
           {files.map(file => (
             <div 
               key={file.id}
@@ -273,7 +290,7 @@ export default function App() {
               </button>
             </div>
           ))}
-          {files.length === 0 && <p className="text-center text-xs text-slate-300 py-10 italic">Nenhum arquivo ainda.</p>}
+          {files.length === 0 && <p className="text-center text-xs text-slate-300 py-10 italic">Nenhum ficheiro encontrado.</p>}
         </nav>
 
         <div className="p-4 border-t border-slate-100">
@@ -283,7 +300,7 @@ export default function App() {
               showAdminView ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
             }`}
           >
-            <Database size={14} /> {showAdminView ? 'Sair do Modo Dados' : 'Ver Dados do Firestore'}
+            <Database size={14} /> {showAdminView ? 'Fechar Modo Dados' : 'Explorar Firestore'}
           </button>
         </div>
 
@@ -302,12 +319,12 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Conteúdo Principal */}
+      {/* Área de Conteúdo */}
       <main className="flex-1 flex flex-col bg-white overflow-hidden">
         {showAdminView ? (
           <div className="flex-1 flex flex-col p-8 bg-slate-900 text-slate-300 overflow-hidden">
-            <h2 className="text-xl font-bold text-white mb-4">Dados Brutos (JSON)</h2>
-            <div className="flex-1 bg-black/40 rounded-2xl p-6 overflow-y-auto font-mono text-xs">
+            <h2 className="text-xl font-bold text-white mb-4">Dados Brutos (Firestore)</h2>
+            <div className="flex-1 bg-black/40 rounded-2xl p-6 overflow-y-auto font-mono text-xs custom-scrollbar">
               <pre className="text-amber-200">{JSON.stringify(files, null, 2)}</pre>
             </div>
           </div>
@@ -316,7 +333,10 @@ export default function App() {
             <header className="h-16 border-b border-slate-100 px-6 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-bold text-slate-800">{activeFile.name}</h2>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest px-2 py-1 bg-slate-50 rounded border border-slate-100">Sincronizado</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded border border-emerald-100">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest">Online</span>
+                </div>
               </div>
               <button 
                 onClick={() => setIsEditing(!isEditing)}
@@ -324,7 +344,7 @@ export default function App() {
                   isEditing ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {isEditing ? <><Save size={16} /> Salvar Alterações</> : <><Edit3 size={16} /> Editar Texto</>}
+                {isEditing ? <><Save size={16} /> Gravar</> : <><Edit3 size={16} /> Editar Texto</>}
               </button>
             </header>
 
@@ -332,23 +352,23 @@ export default function App() {
               <div className="flex-1 flex flex-col p-6 overflow-hidden border-r border-slate-50">
                 {isEditing ? (
                   <textarea 
-                    className="flex-1 w-full p-6 border border-slate-200 rounded-3xl bg-slate-50/30 focus:ring-4 focus:ring-indigo-50 outline-none resize-none font-mono text-slate-700 leading-relaxed transition-all"
+                    className="flex-1 w-full p-6 border border-slate-200 rounded-3xl bg-slate-50/30 focus:ring-4 focus:ring-indigo-50 outline-none resize-none font-mono text-sm leading-relaxed transition-all"
                     value={activeFile.content}
                     onChange={(e) => updateFileContent(e.target.value)}
                   />
                 ) : (
-                  <div className="flex-1 w-full p-8 bg-white rounded-3xl overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner">
-                    {activeFile.content || <span className="text-slate-300 italic">Vazio. Clique em Editar para começar.</span>}
+                  <div className="flex-1 w-full p-8 bg-white rounded-3xl overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar">
+                    {activeFile.content || <span className="text-slate-300 italic">Este ficheiro está vazio.</span>}
                   </div>
                 )}
               </div>
 
               <div className="w-96 bg-slate-50/50 p-6 flex flex-col overflow-hidden">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Checklist</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Lista de Tarefas</h3>
                 <div className="flex gap-2 mb-6">
                   <input 
                     type="text"
-                    className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none shadow-sm"
+                    className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none shadow-sm focus:ring-2 focus:ring-indigo-100"
                     placeholder="Adicionar tarefa..."
                     value={newTaskText}
                     onChange={(e) => setNewTaskText(e.target.value)}
@@ -380,35 +400,35 @@ export default function App() {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20">
-            <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-slate-200/50">
-              <Cloud size={48} className="text-indigo-200" />
+            <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-slate-200/50">
+              <Cloud size={48} className="text-indigo-100" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Cloud TXT Manager</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Pronto a Começar?</h2>
             <p className="max-w-md text-sm text-slate-500 leading-relaxed">
-              Todos os seus arquivos e listas de tarefas são salvos automaticamente no seu banco de dados privado. Escolha um arquivo para começar.
+              Todos os teus ficheiros e tarefas são guardados automaticamente na nuvem. Seleciona um ficheiro à esquerda para começar.
             </p>
           </div>
         )}
       </main>
 
-      {/* Modal Novo Arquivo */}
+      {/* Modal Novo Ficheiro */}
       {showNewFileDialog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-[2rem] p-10 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
             <h3 className="text-2xl font-black text-slate-800 mb-2 text-center">Novo TXT</h3>
-            <p className="text-sm text-slate-500 mb-8 text-center leading-relaxed">Dê um nome ao seu documento. Ele será sincronizado instantaneamente.</p>
+            <p className="text-sm text-slate-500 mb-8 text-center leading-relaxed">Dá um nome ao teu documento. Ele será sincronizado instantaneamente.</p>
             <input 
               autoFocus
               type="text"
               className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none focus:ring-4 focus:ring-indigo-100 mb-8 transition-all"
-              placeholder="Ex: Metas_2024.txt"
+              placeholder="Ex: Metas_2025.txt"
               value={newFileName}
               onChange={(e) => setNewFileName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)}
             />
             <div className="flex gap-4">
               <button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
-              <button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar Arquivo</button>
+              <button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar Ficheiro</button>
             </div>
           </div>
         </div>
@@ -416,7 +436,9 @@ export default function App() {
 
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
       `}} />
     </div>
   );

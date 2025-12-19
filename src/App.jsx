@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, 
   Plus, 
@@ -13,7 +13,8 @@ import {
   Clock,
   Cloud,
   Database,
-  AlertCircle
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -58,6 +59,10 @@ export default function App() {
   const [showAdminView, setShowAdminView] = useState(false);
   const [error, setError] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  
+  // Estado local para evitar o pulo do cursor no textarea
+  const [localContent, setLocalContent] = useState('');
+  const isTypingRef = useRef(false);
 
   // INJETOR DE ESTILO (Para garantir o visual no Vercel/GitHub)
   useEffect(() => {
@@ -116,6 +121,13 @@ export default function App() {
 
   const activeFile = files.find(f => f.id === activeFileId);
 
+  // Sincroniza conteúdo local quando muda de arquivo ou quando não está digitando
+  useEffect(() => {
+    if (activeFile && !isTypingRef.current) {
+      setLocalContent(activeFile.content || '');
+    }
+  }, [activeFileId, activeFile?.content]);
+
   const createNewFile = async (name, content = "") => {
     if (!user || !name) return;
     const fileId = crypto.randomUUID();
@@ -150,6 +162,7 @@ export default function App() {
 
   const updateFileContent = async (content) => {
     if (!user || !activeFileId) return;
+    setLocalContent(content);
     const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
     try {
       await updateDoc(fileRef, { content, updatedAt: Date.now() });
@@ -165,7 +178,7 @@ export default function App() {
       await deleteDoc(fileRef);
       if (activeFileId === id) setActiveFileId(null);
     } catch (err) {
-      console.error("Erro ao eliminar:", err);
+      console.error("Erro ao eliminar ficheiro:", err);
     }
   };
 
@@ -191,7 +204,13 @@ export default function App() {
     await updateDoc(fileRef, { tasks: updatedTasks, updatedAt: Date.now() });
   };
 
-  const completedLists = files.filter(f => f.tasks.length > 0 && f.tasks.every(t => t.completed));
+  const calculateProgress = (file) => {
+    if (!file.tasks || file.tasks.length === 0) return 0;
+    const completed = file.tasks.filter(t => t.completed).length;
+    return Math.round((completed / file.tasks.length) * 100);
+  };
+
+  const completedLists = files.filter(f => f.tasks && f.tasks.length > 0 && f.tasks.every(t => t.completed));
 
   if (error) {
     return (
@@ -232,15 +251,37 @@ export default function App() {
 
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
           <div className="text-xs font-bold text-slate-400 px-2 py-3 uppercase tracking-wider">Meus Ficheiros</div>
-          {files.map(file => (
-            <div key={file.id} onClick={() => { setActiveFileId(file.id); setShowAdminView(false); }} className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all ${activeFileId === file.id && !showAdminView ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'hover:bg-slate-50 text-slate-600'}`}>
-              <div className="flex items-center gap-3 overflow-hidden">
-                <FileText size={18} className={activeFileId === file.id ? 'text-indigo-500' : 'text-slate-400'} />
-                <span className="truncate font-medium text-sm">{file.name}</span>
+          {files.map(file => {
+            const progress = calculateProgress(file);
+            return (
+              <div 
+                key={file.id} 
+                onClick={() => { setActiveFileId(file.id); setShowAdminView(false); }} 
+                className={`group flex flex-col p-3 rounded-xl cursor-pointer transition-all ${activeFileId === file.id && !showAdminView ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <FileText size={18} className={activeFileId === file.id ? 'text-indigo-500' : 'text-slate-400'} />
+                    <span className="truncate font-medium text-sm">{file.name}</span>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); deleteFile(file.id); }} className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all"><Trash2 size={14} /></button>
+                </div>
+                {/* Barra de progresso miniatura na sidebar */}
+                {file.tasks && file.tasks.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-emerald-500' : 'bg-indigo-400'}`} 
+                        style={{ width: `${progress}%` }} 
+                      />
+                    </div>
+                    <span className="text-[9px] font-bold opacity-60">{progress}%</span>
+                  </div>
+                )}
               </div>
-              <button onClick={(e) => { e.stopPropagation(); deleteFile(file.id); }} className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg"><Trash2 size={14} /></button>
-            </div>
-          ))}
+            );
+          })}
+          {files.length === 0 && <p className="text-center text-xs text-slate-300 py-10 italic">Nenhum ficheiro encontrado.</p>}
         </nav>
 
         <div className="p-4 border-t border-slate-100">
@@ -265,24 +306,50 @@ export default function App() {
           </div>
         ) : activeFile ? (
           <>
-            <header className="h-16 border-b border-slate-100 px-6 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-4">
-                <h2 className="text-lg font-bold text-slate-800">{activeFile.name}</h2>
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest">Online</span></div>
+            <header className="h-20 border-b border-slate-100 px-6 flex items-center justify-between shrink-0 bg-white shadow-sm z-10">
+              <div className="flex flex-col">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-slate-800">{activeFile.name}</h2>
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest">Online</span></div>
+                </div>
+                {activeFile.tasks && activeFile.tasks.length > 0 && (
+                  <div className="flex items-center gap-3 mt-1">
+                    <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-indigo-500 transition-all duration-700" 
+                        style={{ width: `${calculateProgress(activeFile)}%` }} 
+                      />
+                    </div>
+                    <span className="text-[11px] font-bold text-indigo-600">{calculateProgress(activeFile)}% concluído</span>
+                  </div>
+                )}
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${isEditing ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16} /> Gravar</> : <><Edit3 size={16} /> Editar Texto</>}</button>
+              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${isEditing ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16} /> Gravar</> : <><Edit3 size={16} /> Editar Texto</>}</button>
             </header>
 
             <div className="flex-1 flex overflow-hidden">
               <div className="flex-1 flex flex-col p-6 overflow-hidden border-r border-slate-50">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Documento</h3>
+                  {isEditing && <span className="text-[10px] text-amber-500 font-bold animate-pulse">MODO DE EDIÇÃO ATIVO</span>}
+                </div>
                 {isEditing ? (
-                  <textarea className="flex-1 w-full p-6 border border-slate-200 rounded-3xl bg-slate-50/30 focus:ring-4 focus:ring-indigo-50 outline-none resize-none font-mono text-sm leading-relaxed transition-all" value={activeFile.content} onChange={(e) => updateFileContent(e.target.value)} />
+                  <textarea 
+                    className="flex-1 w-full p-6 border border-slate-200 rounded-3xl bg-slate-50/30 focus:ring-4 focus:ring-indigo-50 outline-none resize-none font-mono text-sm leading-relaxed transition-all" 
+                    value={localContent} 
+                    onFocus={() => { isTypingRef.current = true; }}
+                    onBlur={() => { isTypingRef.current = false; }}
+                    onChange={(e) => updateFileContent(e.target.value)} 
+                  />
                 ) : (
-                  <div className="flex-1 w-full p-8 bg-white rounded-3xl overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar">{activeFile.content || <span className="text-slate-300 italic">Vazio.</span>}</div>
+                  <div className="flex-1 w-full p-8 bg-white rounded-3xl overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar">{activeFile.content || <span className="text-slate-300 italic">Este ficheiro está vazio.</span>}</div>
                 )}
               </div>
               <div className="w-96 bg-slate-50/50 p-6 flex flex-col overflow-hidden">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 font-sans">Checklist</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 font-sans flex items-center justify-between">
+                  <span>Lista de Tarefas</span>
+                  {calculateProgress(activeFile) === 100 && <CheckCircle size={14} className="text-emerald-500" />}
+                </h3>
                 <div className="flex gap-2 mb-6">
                   <input type="text" className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none shadow-sm focus:ring-2 focus:ring-indigo-100 font-sans" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} />
                   <button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-md transition-all active:scale-95"><Plus size={20} /></button>
@@ -313,9 +380,9 @@ export default function App() {
           <div className="bg-white rounded-[2rem] p-10 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
             <h3 className="text-2xl font-black text-slate-800 mb-2 text-center">Novo TXT</h3>
             <p className="text-sm text-slate-500 mb-8 text-center leading-relaxed">Nome do documento para sincronizar.</p>
-            <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none focus:ring-4 focus:ring-indigo-100 mb-8 transition-all" placeholder="Ex: Notas_2025.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
+            <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none focus:ring-4 focus:ring-indigo-100 mb-8 transition-all" placeholder="Ex: Metas_2025.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
             <div className="flex gap-4">
-              <button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
+              <button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-100 rounded-2xl transition-all">Cancelar</button>
               <button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 active:scale-95 transition-all">Criar Ficheiro</button>
             </div>
           </div>
@@ -323,7 +390,6 @@ export default function App() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        /* Reset para preencher a tela toda */
         html, body, #root {
           height: 100% !important;
           width: 100% !important;

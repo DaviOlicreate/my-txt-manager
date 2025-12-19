@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   Clock,
   Cloud,
-  Database
+  Database,
+  AlertCircle
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -55,12 +56,22 @@ export default function App() {
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [showAdminView, setShowAdminView] = useState(false);
+  const [error, setError] = useState(null);
 
   // 1. Autenticação (Entra automaticamente de forma anônima)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        await signInAnonymously(auth);
+        try {
+          await signInAnonymously(auth);
+        } catch (err) {
+          console.error("Erro na autenticação:", err.code);
+          if (err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed') {
+            setError("O login Anónimo não está ativado no Firebase. Vá a 'Authentication' -> 'Sign-in method' e ative 'Anónimo'.");
+          } else {
+            setError(`Erro de Autenticação: ${err.message}`);
+          }
+        }
       } else {
         setUser(currentUser);
       }
@@ -82,8 +93,11 @@ export default function App() {
       }));
       // Ordena por data de atualização (mais novos primeiro)
       setFiles(filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
-    }, (error) => {
-      console.error("Erro na sincronização:", error);
+    }, (err) => {
+      console.error("Erro na sincronização:", err);
+      if (err.code === 'permission-denied') {
+        setError("Permissão negada no Firestore. Verifique se criou o banco de dados em 'Modo de Teste' ou se as regras permitem acesso.");
+      }
     });
 
     return () => unsubscribe();
@@ -169,6 +183,35 @@ export default function App() {
   };
 
   const completedLists = files.filter(f => f.tasks.length > 0 && f.tasks.every(t => t.completed));
+
+  // Renderização de Erro Crítico
+  if (error) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl border border-red-100 max-w-lg">
+          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertCircle className="text-red-500" size={40} />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 mb-4">Configuração Necessária</h2>
+          <div className="bg-red-50/50 p-4 rounded-2xl mb-6 text-left border border-red-100">
+            <p className="text-red-700 text-sm leading-relaxed font-medium">{error}</p>
+          </div>
+          <ol className="text-left text-xs text-slate-500 space-y-2 mb-8 list-decimal pl-4">
+            <li>Aceda ao Firebase Console</li>
+            <li>Vá a <strong>Build {'>'} Authentication</strong></li>
+            <li>Ative o provedor <strong>Anonymous</strong></li>
+            <li>Vá a <strong>Build {'>'} Firestore Database</strong> e crie o banco de dados em "Modo de Teste".</li>
+          </ol>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-lg active:scale-95"
+          >
+            Recarregar Aplicação
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (

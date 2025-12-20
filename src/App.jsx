@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
-  User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft
+  User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, BookOpen
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -88,7 +88,8 @@ export default function App() {
       const filesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const sorted = filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       setFiles(sorted);
-      checkAndTriggerAutoSummary(sorted);
+      // Passa true para indicar que é uma verificação inicial
+      checkAndTriggerAutoSummary(sorted, true);
     }, (err) => {
       console.error(err);
     });
@@ -104,7 +105,7 @@ export default function App() {
     }
   }, [activeFileId, activeFile?.content]);
 
-  const checkAndTriggerAutoSummary = async (currentFiles) => {
+  const checkAndTriggerAutoSummary = async (currentFiles, isInitialLoad = false) => {
     if (currentFiles.length === 0 || !apiKey) return;
     
     const today = new Date().toLocaleDateString();
@@ -115,8 +116,13 @@ export default function App() {
       const data = docSnap.exists() ? docSnap.data() : null;
       
       if (!data || data.date !== today) {
-        generateAISummary(currentFiles, true);
+        // Se for carregamento inicial e não tiver resumo, gera.
+        // Se for atualização de snapshot (ex: digitando), evitamos gerar automaticamente para não gastar quota.
+        if (isInitialLoad) {
+           generateAISummary(currentFiles, true);
+        }
       } else {
+        // Se já existe, carrega para o estado para que o botão "Ver Resumo" funcione
         setAiSummary(data.text);
       }
     } catch (e) {
@@ -168,6 +174,14 @@ export default function App() {
       if (!isAuto) setError(`Erro na IA: ${err.message}`);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleSidebarSummaryClick = () => {
+    if (aiSummary) {
+      setCurrentView('ai-summary');
+    } else {
+      generateAISummary(files, false);
     }
   };
 
@@ -246,7 +260,6 @@ export default function App() {
     </div>
   );
 
-  // TELA DE LOGIN COM ESTILO HÍBRIDO (CSS INLINE + TAILWIND) PARA GARANTIR VISUALIZAÇÃO
   if (!user) return (
     <div 
       className="bg-slate-50 font-sans"
@@ -260,7 +273,7 @@ export default function App() {
         position: 'fixed', 
         top: 0, 
         left: 0, 
-        backgroundColor: '#f8fafc' // Fallback color
+        backgroundColor: '#f8fafc'
       }}
     >
       <div 
@@ -272,7 +285,7 @@ export default function App() {
           maxWidth: '28rem',
           width: '100%',
           textAlign: 'center',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' // Fallback shadow
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
         }}
       >
         <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
@@ -330,17 +343,20 @@ export default function App() {
         </div>
 
         <div className="p-4 space-y-2 border-b border-slate-50">
+          {/* BOTÃO DA IA MODIFICADO: ALTERNA ENTRE VER E GERAR */}
           <button 
-            onClick={() => generateAISummary()}
+            onClick={handleSidebarSummaryClick}
             disabled={files.length === 0 || isGenerating}
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
               isGenerating 
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02] disabled:opacity-50'
+                : aiSummary 
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-600' // Estilo verde para "Ver"
+                  : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]' // Estilo roxo para "Gerar"
             }`}
           >
-            {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-            Resumo do Dia (IA)
+            {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}
+            {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
           
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm">
@@ -396,10 +412,7 @@ export default function App() {
         {currentView === 'ai-summary' ? (
           <div className="flex-1 overflow-hidden p-6 md:p-12 bg-indigo-50/10 flex justify-center h-full">
             <div className="max-w-4xl w-full bg-white rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden">
-              <div className="p-8 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
-                <button onClick={() => setCurrentView('files')} className="mb-8 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group">
-                  <ChevronLeft size={20} className="group-hover:scale-110" /> Voltar para Meus Arquivos
-                </button>
+              <div className="p-8 md:p-12 pb-6 border-b border-indigo-50 shrink-0 flex justify-between items-start">
                 <div className="flex items-center gap-6">
                   <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={42} /></div>
                   <div>
@@ -407,6 +420,15 @@ export default function App() {
                     <p className="text-slate-400 font-medium italic mt-1 text-sm md:text-base">Análise inteligente automatizada</p>
                   </div>
                 </div>
+                {/* BOTÃO DE REGENERAR */}
+                <button 
+                  onClick={() => generateAISummary(files, true)} // Força regeneração manual
+                  className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
+                  title="Atualizar Resumo com novas informações"
+                >
+                  <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
+                  Regenerar
+                </button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-8 md:p-12 pt-6 custom-scrollbar">

@@ -53,16 +53,13 @@ export default function App() {
   const [error, setError] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
-  // Estados de IA e Visualização
   const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Estados para correção do Cursor
   const [localContent, setLocalContent] = useState('');
   const isTypingRef = useRef(false);
 
-  // Injetar Tailwind
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -72,7 +69,6 @@ export default function App() {
     }
   }, []);
 
-  // 1. Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -81,7 +77,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Firestore Sync e Verificação de Resumo Automático
   useEffect(() => {
     if (!user) {
       setFiles([]);
@@ -93,8 +88,6 @@ export default function App() {
       const filesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const sorted = filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       setFiles(sorted);
-      
-      // LOGICA DE RECORRÊNCIA: Se for o primeiro acesso do dia e tivermos arquivos, gera o resumo.
       checkAndTriggerAutoSummary(sorted);
     }, (err) => {
       console.error(err);
@@ -111,7 +104,6 @@ export default function App() {
     }
   }, [activeFileId, activeFile?.content]);
 
-  // Função para verificar se já houve um resumo hoje
   const checkAndTriggerAutoSummary = async (currentFiles) => {
     if (currentFiles.length === 0 || !apiKey) return;
     
@@ -122,7 +114,6 @@ export default function App() {
       const docSnap = await getDoc(summaryRef);
       const data = docSnap.exists() ? docSnap.data() : null;
       
-      // Se não existe resumo para hoje, gera automaticamente
       if (!data || data.date !== today) {
         generateAISummary(currentFiles, true);
       } else {
@@ -165,7 +156,6 @@ export default function App() {
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       setAiSummary(result);
 
-      // Salvar para marcar que o resumo de hoje foi feito
       const summaryRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
       await setDoc(summaryRef, {
         text: result,
@@ -205,7 +195,6 @@ export default function App() {
     setCurrentView('files');
   };
 
-  // FUNÇÃO DE IMPORTAÇÃO .TXT
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -214,7 +203,7 @@ export default function App() {
       createNewFile(file.name, e.target.result);
     };
     reader.readAsText(file);
-    event.target.value = null; // Reset para permitir upload do mesmo arquivo
+    event.target.value = null; 
   };
 
   const updateFileContent = async (content) => {
@@ -255,13 +244,20 @@ export default function App() {
 
   if (!user) return (
     <div className="h-screen w-screen bg-slate-50 font-sans flex items-center justify-center p-6 fixed inset-0">
-      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100">
+      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500">
         <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={40} className="text-white" /></div>
         <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">TXT Manager</h1>
-        <p className="text-slate-500 mb-10 text-lg leading-relaxed">Sincronize suas notas com Inteligência Artificial.</p>
+        <p className="text-slate-500 mb-10 text-lg leading-relaxed">
+          Organize suas notas e tarefas em qualquer lugar com segurança total.
+        </p>
+        
+        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left">{error}</div>}
+
         <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group">
           <GoogleIcon /> <span>Entrar com conta Google</span>
         </button>
+
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Acesso Multi-usuário</p>
       </div>
     </div>
   );
@@ -295,7 +291,6 @@ export default function App() {
             <Plus size={18} /> Novo Documento
           </button>
 
-          {/* BOTÃO DE IMPORTAR */}
           <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">
             <Upload size={14} /> Importar .txt
             <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
@@ -423,7 +418,7 @@ export default function App() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
+        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }

@@ -30,8 +30,7 @@ const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para funcionar no Vercel, cole sua chave entre as aspas abaixo
-// Obtenha uma em: https://aistudio.google.com/app/apikey
-const apiKey = "AIzaSyAE1ereIk1hL4XZ5G_4LJCkEtkjzzeKtJU"; 
+const apiKey = ""; 
 
 // Ícone do Google SVG
 const GoogleIcon = () => (
@@ -321,44 +320,110 @@ export default function App() {
         )}
 
         {currentView === 'ai-summary' ? (
-          <div className="flex-1 overflow-y-auto p-12 bg-indigo-50/10 flex justify-center custom-scrollbar">
-            <div className="max-w-3xl w-full bg-white rounded-[3rem] shadow-xl p-12 border border-indigo-50 animate-in fade-in slide-in-from-bottom duration-500">
-              <button onClick={() => setCurrentView('files')} className="mb-10 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group">
-                <ChevronLeft size={20} /> Voltar para Arquivos
-              </button>
-              <div className="flex items-center gap-6 mb-12">
-                <div className="w-20 h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3"><Brain size={42} /></div>
-                <div><h2 className="text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1">Análise inteligente baseada em {files.length} documentos</p></div>
+          /* VISUALIZAÇÃO DA IA - MELHORIA DE LAYOUT */
+          <div className="flex-1 overflow-hidden p-6 md:p-12 bg-indigo-50/10 flex justify-center h-full">
+            <div className="max-w-4xl w-full bg-white rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom duration-500">
+              {/* Cabeçalho Fixo do Resumo */}
+              <div className="p-8 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
+                <button onClick={() => setCurrentView('files')} className="mb-8 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group">
+                  <ChevronLeft size={20} className="group-hover:scale-110" /> Voltar para Meus Arquivos
+                </button>
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0">
+                    <Brain size={42} />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2>
+                    <p className="text-slate-400 font-medium italic mt-1 text-sm md:text-base">Análise inteligente baseada em {files.length} documentos</p>
+                  </div>
+                </div>
               </div>
-              {isGenerating ? (
-                <div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div><div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div><div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div></div>
-              ) : aiSummary ? (
-                <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-10 rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner">{aiSummary}</div>
-              ) : (
-                <div className="text-center py-32"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div><p className="text-slate-400 font-medium">Clique no botão para gerar o resumo.</p></div>
-              )}
+
+              {/* Área com Scroll Independente para o Texto */}
+              <div className="flex-1 overflow-y-auto p-8 md:p-12 pt-6 custom-scrollbar">
+                {isGenerating ? (
+                  <div className="space-y-8 py-4">
+                    <div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div>
+                    <div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div>
+                    <div className="h-4 bg-slate-100 rounded-full w-5/6 animate-pulse"></div>
+                    <div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div>
+                  </div>
+                ) : aiSummary ? (
+                  <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-8 md:p-10 rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words">
+                    {aiSummary}
+                  </div>
+                ) : (
+                  <div className="text-center py-32">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div>
+                    <p className="text-slate-400 font-medium">Clique no botão para gerar o resumo.</p>
+                  </div>
+                )}
+                
+                <div className="mt-12 pt-8 border-t border-slate-100 text-center pb-8">
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">IA Processada por Gemini 2.5 Flash</p>
+                </div>
+              </div>
             </div>
           </div>
         ) : activeFile ? (
+          /* VISUALIZAÇÃO DO EDITOR */
           <>
-            <header className="h-20 border-b border-slate-100 px-8 flex items-center justify-between bg-white/80 backdrop-blur-md shadow-sm z-10">
+            <header className="h-20 border-b border-slate-100 px-8 flex items-center justify-between bg-white/80 backdrop-blur-md shadow-sm z-10 shrink-0">
               <div className="flex flex-col">
-                <div className="flex items-center gap-3"><h2 className="text-xl font-bold text-slate-800">{activeFile.name}</h2><span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span></div>
-                <div className="flex items-center gap-3 mt-1.5"><div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}% concluído</span></div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-slate-800">{activeFile.name}</h2>
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    Sincronizado
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-1.5">
+                   <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} />
+                   </div>
+                   <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}% concluído</span>
+                </div>
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={18}/> Salvar</> : <><Edit3 size={18}/> Editar Conteúdo</>}</button>
+              <button 
+                onClick={() => setIsEditing(!isEditing)} 
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 ${
+                  isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {isEditing ? <><Save size={18}/> Salvar</> : <><Edit3 size={18}/> Editar Conteúdo</>}
+              </button>
             </header>
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden h-full">
               <div className="flex-1 p-8 overflow-hidden flex flex-col bg-white">
-                <div className="mb-4 flex justify-between items-center"><h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Área de Escrita</h3>{isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}</div>
+                <div className="mb-4 flex justify-between items-center shrink-0">
+                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Área de Escrita</h3>
+                   {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}
+                </div>
                 {isEditing ? (
-                  <textarea className="flex-1 p-8 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => { isTypingRef.current = true; }} onBlur={() => { isTypingRef.current = false; }} onChange={(e) => updateFileContent(e.target.value)} />
+                  <textarea 
+                    className="flex-1 p-8 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" 
+                    value={localContent} 
+                    onFocus={() => { isTypingRef.current = true; }} 
+                    onBlur={() => { isTypingRef.current = false; }} 
+                    onChange={(e) => updateFileContent(e.target.value)} 
+                    placeholder="Comece a escrever..."
+                  />
                 ) : (
-                  <div className="flex-1 p-10 bg-slate-50/30 rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>
+                  <div className="flex-1 p-10 bg-slate-50/30 rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar border-dashed">
+                    {activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}
+                  </div>
                 )}
               </div>
+              
               <div className="w-96 bg-slate-50/50 p-8 flex flex-col overflow-hidden border-l border-slate-100">
-                <div className="mb-8"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Minhas Tarefas</h3><div className="flex gap-2"><input type="text" className="flex-1 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} /><button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={24} /></button></div></div>
+                <div className="mb-8 shrink-0">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Minhas Tarefas</h3>
+                  <div className="flex gap-2">
+                    <input type="text" className="flex-1 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} />
+                    <button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={24} /></button>
+                  </div>
+                </div>
+                
                 <div className="space-y-2.5 overflow-y-auto custom-scrollbar flex-1 pr-2">
                   {activeFile.tasks?.map(task => (
                     <div key={task.id} className={`group flex items-center gap-3 p-4 rounded-2xl border transition-all ${task.completed ? 'bg-emerald-50/40 border-emerald-100 text-slate-400' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:border-indigo-200'}`}>
@@ -367,13 +432,19 @@ export default function App() {
                       <button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"><X size={16} /></button>
                     </div>
                   ))}
+                  {(!activeFile.tasks || activeFile.tasks.length === 0) && (
+                    <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas vinculadas.</div>
+                  )}
                 </div>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 h-full w-full">
-            <div className="w-32 h-32 bg-white rounded-[3rem] flex items-center justify-center mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100"><Cloud size={64} className="text-indigo-500" /></div>
+          /* TELA DE BOAS VINDAS */
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 h-full w-full overflow-hidden">
+            <div className="w-32 h-32 bg-white rounded-[3rem] flex items-center justify-center mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100 group hover:rotate-0 transition-all duration-500">
+              <Cloud size={64} className="text-indigo-500 group-hover:scale-110 transition-transform" />
+            </div>
             <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">Olá, {user.displayName?.split(' ')[0]}!</h2>
             <p className="max-w-md text-slate-500 leading-relaxed text-lg font-medium text-center">Seus documentos estão seguros. Escolha um arquivo ao lado ou peça um resumo à nossa IA.</p>
           </div>
@@ -383,7 +454,7 @@ export default function App() {
       {/* MODAL NOVO ARQUIVO */}
       {showNewFileDialog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[3rem] p-12 w-full max-w-md shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-[3rem] p-12 w-full max-w-md shadow-2xl border border-slate-100 animate-in zoom-in duration-300">
             <h3 className="text-3xl font-black text-slate-800 mb-8 text-center tracking-tighter">Criar Novo TXT</h3>
             <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-10 focus:ring-4 focus:ring-indigo-100 transition-all shadow-inner" placeholder="Ex: Projeto_Viagem.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
             <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar Arquivo</button></div>
@@ -392,10 +463,12 @@ export default function App() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
+        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+        .break-words { overflow-wrap: break-word; }
       `}} />
     </div>
   );

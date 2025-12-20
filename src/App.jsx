@@ -33,7 +33,7 @@ const PROJECT_ID = 'my-txt-manager';
 const apiKey = "AIzaSyAE1ereIk1hL4XZ5G_4LJCkEtkjzzeKtJU"; 
 
 const GoogleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 48 48">
+  <svg width="24" height="24" viewBox="0 0 48 48">
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
     <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
@@ -240,24 +240,80 @@ export default function App() {
     return Math.round((file.tasks.filter(t => t.completed).length / file.tasks.length) * 100);
   };
 
-  if (isLoadingAuth) return <div className="h-screen w-screen flex items-center justify-center bg-slate-50 fixed inset-0"><Loader2 className="animate-spin text-indigo-600" /></div>;
+  if (isLoadingAuth) return (
+    <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', position: 'fixed', top: 0, left: 0 }}>
+      <Loader2 className="animate-spin text-indigo-600" />
+    </div>
+  );
 
+  // TELA DE LOGIN COM ESTILO HÍBRIDO (CSS INLINE + TAILWIND) PARA GARANTIR VISUALIZAÇÃO
   if (!user) return (
-    <div className="h-screen w-screen bg-slate-50 font-sans flex items-center justify-center p-6 fixed inset-0">
-      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500">
-        <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={40} className="text-white" /></div>
-        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">TXT Manager</h1>
-        <p className="text-slate-500 mb-10 text-lg leading-relaxed">
+    <div 
+      className="bg-slate-50 font-sans"
+      style={{ 
+        height: '100vh', 
+        width: '100vw', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        padding: '1.5rem', 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        backgroundColor: '#f8fafc' // Fallback color
+      }}
+    >
+      <div 
+        className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500"
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '3rem',
+          padding: '3rem',
+          maxWidth: '28rem',
+          width: '100%',
+          textAlign: 'center',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' // Fallback shadow
+        }}
+      >
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
+          <FileText size={48} className="text-white" />
+        </div>
+        
+        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>
+          TXT Manager
+        </h1>
+        
+        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>
           Organize suas notas e tarefas em qualquer lugar com segurança total.
         </p>
         
-        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left">{error}</div>}
+        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
 
-        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group">
-          <GoogleIcon /> <span>Entrar com conta Google</span>
+        <button 
+          onClick={handleLogin} 
+          className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1rem',
+            width: '100%',
+            padding: '1rem 1.5rem',
+            backgroundColor: 'white',
+            border: '2px solid #e2e8f0',
+            borderRadius: '1rem',
+            fontWeight: 'bold',
+            color: '#334155',
+            cursor: 'pointer'
+          }}
+        >
+          <GoogleIcon /> 
+          <span>Entrar com conta Google</span>
         </button>
 
-        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Acesso Multi-usuário</p>
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>
+          Acesso Multi-usuário
+        </p>
       </div>
     </div>
   );
@@ -418,7 +474,7 @@ export default function App() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
+        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }

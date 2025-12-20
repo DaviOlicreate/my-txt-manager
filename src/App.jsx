@@ -30,7 +30,7 @@ const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para funcionar no Vercel, cole sua chave do Google AI Studio abaixo
-const apiKey = "AIzaSyCFM-MVcVrMFnCGYmfIVtFzWpjpKQ5bYic"; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">

@@ -29,10 +29,9 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
-// ATENÇÃO: Para funcionar no Vercel, cole sua chave entre as aspas abaixo
+// ATENÇÃO: Para funcionar no Vercel, cole sua chave do Google AI Studio abaixo
 const apiKey = "AIzaSyAE1ereIk1hL4XZ5G_4LJCkEtkjzzeKtJU"; 
 
-// Ícone do Google SVG
 const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 48 48">
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -52,11 +51,10 @@ export default function App() {
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [error, setError] = useState(null);
-  const [errorCode, setErrorCode] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
   // Estados de IA e Visualização
-  const [currentView, setCurrentView] = useState('files'); // 'files' ou 'ai-summary'
+  const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -64,7 +62,7 @@ export default function App() {
   const [localContent, setLocalContent] = useState('');
   const isTypingRef = useRef(false);
 
-  // Injetar Tailwind para garantir o visual no Vercel
+  // Injetar Tailwind
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -83,20 +81,23 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Firestore Sync
+  // 2. Firestore Sync e Verificação de Resumo Automático
   useEffect(() => {
     if (!user) {
       setFiles([]);
       return;
     }
 
-    const filesRef = collection(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files');
+    const filesRef = collection(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files');
     const unsubscribe = onSnapshot(filesRef, (snapshot) => {
       const filesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setFiles(filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+      const sorted = filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      setFiles(sorted);
+      
+      // LOGICA DE RECORRÊNCIA: Se for o primeiro acesso do dia e tivermos arquivos, gera o resumo.
+      checkAndTriggerAutoSummary(sorted);
     }, (err) => {
       console.error(err);
-      if (err.code === 'permission-denied') setError("Permissão negada no banco de dados.");
     });
 
     return () => unsubscribe();
@@ -104,87 +105,96 @@ export default function App() {
 
   const activeFile = files.find(f => f.id === activeFileId);
 
-  // Sincroniza conteúdo local apenas quando NÃO está digitando (Correção do Cursor)
   useEffect(() => {
     if (activeFile && !isTypingRef.current) {
       setLocalContent(activeFile.content || '');
     }
   }, [activeFileId, activeFile?.content]);
 
-  // Função para chamar a IA Gemini
-  const generateAISummary = async () => {
-    if (files.length === 0) return;
+  // Função para verificar se já houve um resumo hoje
+  const checkAndTriggerAutoSummary = async (currentFiles) => {
+    if (currentFiles.length === 0 || !apiKey) return;
+    
+    const today = new Date().toLocaleDateString();
+    const summaryRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
+    
+    try {
+      const docSnap = await getDoc(summaryRef);
+      const data = docSnap.exists() ? docSnap.data() : null;
+      
+      // Se não existe resumo para hoje, gera automaticamente
+      if (!data || data.date !== today) {
+        generateAISummary(currentFiles, true);
+      } else {
+        setAiSummary(data.text);
+      }
+    } catch (e) {
+      console.error("Erro ao verificar recorrência:", e);
+    }
+  };
+
+  const generateAISummary = async (filesToAnalyze = files, isAuto = false) => {
+    if (filesToAnalyze.length === 0) return;
     setIsGenerating(true);
-    setCurrentView('ai-summary');
+    if (!isAuto) setCurrentView('ai-summary');
     setError(null);
 
-    const allContent = files.map(f => {
-      const tasks = f.tasks?.map(t => `[${t.completed ? 'Feito' : 'Pendente'}] ${t.text}`).join(', ') || 'Sem tarefas';
+    const allContent = filesToAnalyze.map(f => {
+      const tasks = f.tasks?.map(t => `[${t.completed ? 'Concluído' : 'Pendente'}] ${t.text}`).join(', ') || 'Sem tarefas';
       return `Arquivo: ${f.name}\nConteúdo: ${f.content}\nTarefas: ${tasks}`;
     }).join('\n\n---\n\n');
 
-    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas fornecidos e crie um 'Resumo da Manhã' motivador. 1. Comece com uma saudação. 2. Liste os tópicos que o usuário está focando. 3. Destaque o que falta concluir. 4. Dê um conselho de produtividade. Use Markdown e emojis.";
-    const userQuery = `Aqui estão meus arquivos e tarefas:\n\n${allContent}\n\nPor favor, faça meu resumo matinal.`;
-
-    const fetchAISummary = async (retries = 3) => {
-      if (!apiKey) throw new Error("API Key não configurada. Cole sua chave do Google AI Studio no código.");
-      
-      for (let i = 0; i < retries; i++) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: userQuery }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] }
-            })
-          });
-
-          const data = await response.json();
-          if (data.error) throw new Error(data.error.message);
-          return data.candidates?.[0]?.content?.parts?.[0]?.text;
-        } catch (err) {
-          if (i === retries - 1) throw err;
-          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
-        }
-      }
-    };
+    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas e crie um 'Resumo da Manhã' incrível. 1. Comece com uma saudação. 2. Liste os tópicos principais. 3. Destaque pendências urgentes. 4. Dê uma dica para o dia. Use Markdown.";
+    const userQuery = `Aqui estão meus dados:\n\n${allContent}\n\nFaça meu resumo matinal.`;
 
     try {
-      const result = await fetchAISummary();
+      if (!apiKey) throw new Error("API Key não encontrada.");
+      
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userQuery }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+      
+      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       setAiSummary(result);
+
+      // Salvar para marcar que o resumo de hoje foi feito
+      const summaryRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
+      await setDoc(summaryRef, {
+        text: result,
+        date: new Date().toLocaleDateString(),
+        timestamp: Date.now()
+      });
+
     } catch (err) {
       console.error(err);
-      setError(`A IA não pôde gerar o resumo: ${err.message}`);
+      if (!isAuto) setError(`Erro na IA: ${err.message}`);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Funções de CRUD
   const handleLogin = async () => {
-    try {
-      setError(null);
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      setErrorCode(err.code);
-      setError(err.code === 'auth/unauthorized-domain' ? "Domínio não autorizado no Firebase." : err.message);
-    }
+    try { setError(null); await signInWithPopup(auth, googleProvider); } 
+    catch (err) { setError(err.message); }
   };
 
-  const handleLogout = () => signOut(auth).then(() => { 
-    setActiveFileId(null); 
-    setCurrentView('files'); 
-    setAiSummary(null);
-  });
+  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); });
 
-  const createNewFile = async (name) => {
+  const createNewFile = async (name, content = "") => {
     if (!user || !name) return;
     const fileId = crypto.randomUUID();
-    const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fileId);
+    const fileRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', fileId);
     await setDoc(fileRef, {
       name: name.endsWith('.txt') ? name : `${name}.txt`,
-      content: "",
+      content: content,
       tasks: [],
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -195,33 +205,45 @@ export default function App() {
     setCurrentView('files');
   };
 
+  // FUNÇÃO DE IMPORTAÇÃO .TXT
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      createNewFile(file.name, e.target.result);
+    };
+    reader.readAsText(file);
+    event.target.value = null; // Reset para permitir upload do mesmo arquivo
+  };
+
   const updateFileContent = async (content) => {
     if (!user || !activeFileId) return;
     setLocalContent(content); 
-    const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
+    const fileRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
     await updateDoc(fileRef, { content, updatedAt: Date.now() });
   };
 
   const deleteFile = async (id) => {
-    await deleteDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id));
+    await deleteDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', id));
     if (activeFileId === id) setActiveFileId(null);
   };
 
   const addTask = async () => {
     if (!newTaskText.trim() || !activeFile) return;
     const updatedTasks = [...(activeFile.tasks || []), { id: crypto.randomUUID(), text: newTaskText, completed: false }];
-    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    await updateDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
     setNewTaskText('');
   };
 
   const toggleTask = async (taskId) => {
     const updatedTasks = activeFile.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
-    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    await updateDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
   };
 
   const removeTask = async (taskId) => {
     const updatedTasks = activeFile.tasks.filter(t => t.id !== taskId);
-    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    await updateDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
   };
 
   const calculateProgress = (file) => {
@@ -233,13 +255,10 @@ export default function App() {
 
   if (!user) return (
     <div className="h-screen w-screen bg-slate-50 font-sans flex items-center justify-center p-6 fixed inset-0">
-      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500">
+      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100">
         <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={40} className="text-white" /></div>
         <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">TXT Manager</h1>
         <p className="text-slate-500 mb-10 text-lg leading-relaxed">Sincronize suas notas com Inteligência Artificial.</p>
-        
-        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
-
         <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group">
           <GoogleIcon /> <span>Entrar com conta Google</span>
         </button>
@@ -249,7 +268,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
-      {/* BARRA LATERAL */}
       <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm z-20">
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
@@ -261,7 +279,7 @@ export default function App() {
 
         <div className="p-4 space-y-2 border-b border-slate-50">
           <button 
-            onClick={generateAISummary}
+            onClick={() => generateAISummary()}
             disabled={files.length === 0 || isGenerating}
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
               isGenerating 
@@ -270,12 +288,18 @@ export default function App() {
             }`}
           >
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-            Resumo Inteligente (IA)
+            Resumo do Dia (IA)
           </button>
           
-          <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all text-sm border border-slate-200">
+          <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm">
             <Plus size={18} /> Novo Documento
           </button>
+
+          {/* BOTÃO DE IMPORTAR */}
+          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">
+            <Upload size={14} /> Importar .txt
+            <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
+          </label>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
@@ -309,10 +333,9 @@ export default function App() {
         </nav>
       </aside>
 
-      {/* ÁREA PRINCIPAL */}
       <main className="flex-1 flex flex-col bg-white overflow-hidden relative">
         {error && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3 animate-in slide-in-from-top">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3">
             <AlertCircle size={18} />
             <span className="text-sm font-bold">{error}</span>
             <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-full"><X size={14}/></button>
@@ -320,110 +343,53 @@ export default function App() {
         )}
 
         {currentView === 'ai-summary' ? (
-          /* VISUALIZAÇÃO DA IA - MELHORIA DE LAYOUT */
           <div className="flex-1 overflow-hidden p-6 md:p-12 bg-indigo-50/10 flex justify-center h-full">
-            <div className="max-w-4xl w-full bg-white rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom duration-500">
-              {/* Cabeçalho Fixo do Resumo */}
+            <div className="max-w-4xl w-full bg-white rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden">
               <div className="p-8 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
                 <button onClick={() => setCurrentView('files')} className="mb-8 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group">
                   <ChevronLeft size={20} className="group-hover:scale-110" /> Voltar para Meus Arquivos
                 </button>
                 <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0">
-                    <Brain size={42} />
-                  </div>
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={42} /></div>
                   <div>
                     <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2>
-                    <p className="text-slate-400 font-medium italic mt-1 text-sm md:text-base">Análise inteligente baseada em {files.length} documentos</p>
+                    <p className="text-slate-400 font-medium italic mt-1 text-sm md:text-base">Análise inteligente automatizada</p>
                   </div>
                 </div>
               </div>
 
-              {/* Área com Scroll Independente para o Texto */}
               <div className="flex-1 overflow-y-auto p-8 md:p-12 pt-6 custom-scrollbar">
                 {isGenerating ? (
-                  <div className="space-y-8 py-4">
-                    <div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div>
-                    <div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div>
-                    <div className="h-4 bg-slate-100 rounded-full w-5/6 animate-pulse"></div>
-                    <div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div>
-                  </div>
+                  <div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div><div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div><div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div></div>
                 ) : aiSummary ? (
-                  <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-8 md:p-10 rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words">
-                    {aiSummary}
-                  </div>
+                  <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-8 md:p-10 rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words">{aiSummary}</div>
                 ) : (
-                  <div className="text-center py-32">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div>
-                    <p className="text-slate-400 font-medium">Clique no botão para gerar o resumo.</p>
-                  </div>
+                  <div className="text-center py-32"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div><p className="text-slate-400 font-medium">Nada para mostrar hoje ainda.</p></div>
                 )}
-                
-                <div className="mt-12 pt-8 border-t border-slate-100 text-center pb-8">
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">IA Processada por Gemini 2.5 Flash</p>
-                </div>
+                <div className="mt-12 pt-8 border-t border-slate-100 text-center pb-8"><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">IA Recorrente Ativa</p></div>
               </div>
             </div>
           </div>
         ) : activeFile ? (
-          /* VISUALIZAÇÃO DO EDITOR */
           <>
             <header className="h-20 border-b border-slate-100 px-8 flex items-center justify-between bg-white/80 backdrop-blur-md shadow-sm z-10 shrink-0">
               <div className="flex flex-col">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold text-slate-800">{activeFile.name}</h2>
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                    Sincronizado
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-1.5">
-                   <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} />
-                   </div>
-                   <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}% concluído</span>
-                </div>
+                <div className="flex items-center gap-3"><h2 className="text-xl font-bold text-slate-800">{activeFile.name}</h2><span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span></div>
+                <div className="flex items-center gap-3 mt-1.5"><div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}% concluído</span></div>
               </div>
-              <button 
-                onClick={() => setIsEditing(!isEditing)} 
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 ${
-                  isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {isEditing ? <><Save size={18}/> Salvar</> : <><Edit3 size={18}/> Editar Conteúdo</>}
-              </button>
+              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={18}/> Salvar</> : <><Edit3 size={18}/> Editar Conteúdo</>}</button>
             </header>
             <div className="flex-1 flex overflow-hidden h-full">
               <div className="flex-1 p-8 overflow-hidden flex flex-col bg-white">
-                <div className="mb-4 flex justify-between items-center shrink-0">
-                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Área de Escrita</h3>
-                   {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}
-                </div>
+                <div className="mb-4 flex justify-between items-center shrink-0"><h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Área de Escrita</h3>{isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}</div>
                 {isEditing ? (
-                  <textarea 
-                    className="flex-1 p-8 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" 
-                    value={localContent} 
-                    onFocus={() => { isTypingRef.current = true; }} 
-                    onBlur={() => { isTypingRef.current = false; }} 
-                    onChange={(e) => updateFileContent(e.target.value)} 
-                    placeholder="Comece a escrever..."
-                  />
+                  <textarea className="flex-1 p-8 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => { isTypingRef.current = true; }} onBlur={() => { isTypingRef.current = false; }} onChange={(e) => updateFileContent(e.target.value)} placeholder="Comece a escrever..." />
                 ) : (
-                  <div className="flex-1 p-10 bg-slate-50/30 rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar border-dashed">
-                    {activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}
-                  </div>
+                  <div className="flex-1 p-10 bg-slate-50/30 rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar border-dashed">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>
                 )}
               </div>
-              
               <div className="w-96 bg-slate-50/50 p-8 flex flex-col overflow-hidden border-l border-slate-100">
-                <div className="mb-8 shrink-0">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Minhas Tarefas</h3>
-                  <div className="flex gap-2">
-                    <input type="text" className="flex-1 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} />
-                    <button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={24} /></button>
-                  </div>
-                </div>
-                
+                <div className="mb-8 shrink-0"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Minhas Tarefas</h3><div className="flex gap-2"><input type="text" className="flex-1 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} /><button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={24} /></button></div></div>
                 <div className="space-y-2.5 overflow-y-auto custom-scrollbar flex-1 pr-2">
                   {activeFile.tasks?.map(task => (
                     <div key={task.id} className={`group flex items-center gap-3 p-4 rounded-2xl border transition-all ${task.completed ? 'bg-emerald-50/40 border-emerald-100 text-slate-400' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:border-indigo-200'}`}>
@@ -432,29 +398,23 @@ export default function App() {
                       <button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"><X size={16} /></button>
                     </div>
                   ))}
-                  {(!activeFile.tasks || activeFile.tasks.length === 0) && (
-                    <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas vinculadas.</div>
-                  )}
+                  {(!activeFile.tasks || activeFile.tasks.length === 0) && <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas vinculadas.</div>}
                 </div>
               </div>
             </div>
           </>
         ) : (
-          /* TELA DE BOAS VINDAS */
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 h-full w-full overflow-hidden">
-            <div className="w-32 h-32 bg-white rounded-[3rem] flex items-center justify-center mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100 group hover:rotate-0 transition-all duration-500">
-              <Cloud size={64} className="text-indigo-500 group-hover:scale-110 transition-transform" />
-            </div>
+            <div className="w-32 h-32 bg-white rounded-[3rem] flex items-center justify-center mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100 group hover:rotate-0 transition-all duration-500"><Cloud size={64} className="text-indigo-500 group-hover:scale-110 transition-transform" /></div>
             <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">Olá, {user.displayName?.split(' ')[0]}!</h2>
-            <p className="max-w-md text-slate-500 leading-relaxed text-lg font-medium text-center">Seus documentos estão seguros. Escolha um arquivo ao lado ou peça um resumo à nossa IA.</p>
+            <p className="max-w-md text-slate-500 leading-relaxed text-lg font-medium text-center">Seus documentos estão seguros. No seu primeiro acesso do dia, a IA gera automaticamente seu resumo matinal.</p>
           </div>
         )}
       </main>
 
-      {/* MODAL NOVO ARQUIVO */}
       {showNewFileDialog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[3rem] p-12 w-full max-w-md shadow-2xl border border-slate-100 animate-in zoom-in duration-300">
+          <div className="bg-white rounded-[3rem] p-12 w-full max-w-md shadow-2xl border border-slate-100">
             <h3 className="text-3xl font-black text-slate-800 mb-8 text-center tracking-tighter">Criar Novo TXT</h3>
             <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-10 focus:ring-4 focus:ring-indigo-100 transition-all shadow-inner" placeholder="Ex: Projeto_Viagem.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
             <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar Arquivo</button></div>

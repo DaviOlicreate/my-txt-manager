@@ -30,7 +30,7 @@ const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para funcionar no Vercel, cole sua chave entre as aspas abaixo
-const apiKey = "AIzaSyAE1ereIk1hL4XZ5G_4LJCkEtkjzzeKtJU"; 
+const apiKey = ""; 
 
 // Ícone do Google SVG
 const GoogleIcon = () => (

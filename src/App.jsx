@@ -3,7 +3,7 @@ import {
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
   User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
-  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo, Calendar
+  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -77,35 +77,6 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   wavBytes.set(pcmBytes);
 
   return buffer;
-};
-
-// --- UTILITÁRIOS DE AGENDA (.ICS) ---
-const formatICSDate = (date) => {
-  return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-};
-
-const generateCalendarFile = (tasks) => {
-  let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//TXT Manager//PT\n";
-  
-  tasks.forEach(task => {
-    icsContent += "BEGIN:VEVENT\n";
-    icsContent += `SUMMARY:${task.text}\n`;
-    icsContent += `DTSTART:${formatICSDate(task.start)}\n`;
-    icsContent += `DTEND:${formatICSDate(task.end)}\n`;
-    icsContent += `DESCRIPTION:Gerado pelo TXT Manager\n`;
-    icsContent += "END:VEVENT\n";
-  });
-  
-  icsContent += "END:VCALENDAR";
-  
-  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', 'tarefas_agenda.ics');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 };
 
 export default function App() {
@@ -358,121 +329,6 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
-  const handleExportToCalendar = () => {
-    const tasksToExport = [];
-    const now = new Date();
-
-    // Helper: Interpretar data (hoje, amanhã, segunda, etc.)
-    const getTargetDate = (text) => {
-      const lower = text.toLowerCase();
-      const d = new Date();
-      
-      if (lower.includes('amanhã') || lower.includes('amanha')) {
-        d.setDate(d.getDate() + 1);
-        return d;
-      }
-      
-      const weekMap = {
-        'domingo': 0, 'segunda': 1, 'terça': 2, 'terca': 2, 
-        'quarta': 3, 'quinta': 4, 'sexta': 5, 'sábado': 6, 'sabado': 6
-      };
-      
-      for (const [dayName, dayIndex] of Object.entries(weekMap)) {
-        if (lower.includes(dayName)) {
-          const currentDay = d.getDay();
-          let diff = dayIndex - currentDay;
-          if (diff <= 0) diff += 7; // Próximo dia da semana
-          d.setDate(d.getDate() + diff);
-          return d;
-        }
-      }
-      return d; // Padrão: hoje, a menos que especificado
-    };
-
-    // Helper: Extrair hora e criar objeto Date
-    const extractTime = (str, dateBase) => {
-      // Aceita 14h, 14:30, 14
-      const match = str.match(/(\d{1,2})(?:[:h](\d{2}))?/);
-      if (!match) return null;
-      const newDate = new Date(dateBase);
-      newDate.setHours(parseInt(match[1]), parseInt(match[2] || '0'), 0, 0);
-      return newDate;
-    };
-
-    files.forEach(file => {
-      if (file.tasks && file.tasks.length > 0) {
-        file.tasks.forEach(task => {
-          if (task.completed) return;
-
-          const text = task.text.toLowerCase();
-          // Detectar dia específico mencionado na tarefa
-          const targetDate = getTargetDate(text); 
-          let start = null;
-          let end = null;
-          
-          // Regex 1: Intervalo explícito "15h até 16h", "das 14:00 às 15:30"
-          // Captura duas horas
-          const intervalMatch = text.match(/(?:das?|às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)\s*(?:até|ate|-|às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)/);
-          
-          // Regex 2: Início definido "às 14h" ou "14:30" (ignora se fizer parte de um intervalo "até")
-          const timeMatch = text.match(/(?:^|\s)(?:às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)/);
-          
-          // Regex 3: Duração explícita "duração de 2h", "por 30m"
-          const durationMatch = text.match(/dura(?:ção|cao)\s*(?:de)?\s*(\d+)\s*(h|m|min|horas?|minutos?)/);
-          
-          // Regex 4: Prazo final "até às 10h", "entregar até 11:00" (sem horário de início explícito)
-          const deadlineMatch = text.match(/(?:^|\s)(?:até|ate|para)\s*(?:às?|as?)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
-
-          if (intervalMatch) {
-            // Caso: "15h até 16h"
-            start = extractTime(intervalMatch[1], targetDate);
-            end = extractTime(intervalMatch[2], targetDate);
-          } else if (timeMatch && !intervalMatch) {
-            // Caso: "às 14h" (pode ter duração)
-            start = extractTime(timeMatch[1], targetDate);
-            
-            // Calcula fim: ou pela duração ou padrão 1h
-            if (durationMatch) {
-              const val = parseInt(durationMatch[1]);
-              const unit = durationMatch[2]; // h, m, min
-              const durationMs = (unit.startsWith('h')) ? val * 3600000 : val * 60000;
-              end = new Date(start.getTime() + durationMs);
-            } else {
-              end = new Date(start.getTime() + 3600000); // 1h default
-            }
-          } else if (deadlineMatch) {
-            // Caso: "até às 10h" (Prazo)
-            end = extractTime(deadlineMatch[1], targetDate);
-            // Início é o momento da criação da tarefa (ou agora, se não tiver createdAt)
-            const created = task.createdAt ? new Date(task.createdAt) : new Date();
-            // Se a criação foi antes de hoje, usa start como "agora" ou início do dia alvo?
-            // Regra do usuário: "período vai ser do horário que foi criado a tarefa até a 10"
-            start = created;
-            
-            // Ajuste: Se o prazo é amanhã, o evento atravessa a meia-noite (multi-dia)
-          }
-
-          if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
-             tasksToExport.push({
-               text: task.text,
-               start: start,
-               end: end
-             });
-          }
-        });
-      }
-    });
-
-    if (tasksToExport.length > 0) {
-      generateCalendarFile(tasksToExport);
-    } else {
-      setError("Nenhuma tarefa com horário identificado encontrada (ex: 'às 14h', 'até às 10h', 'amanhã às 15h').");
-      setTimeout(() => setError(null), 4000);
-    }
-    
-    setIsSidebarOpen(false);
-  };
-
   const handleLogin = async () => {
     try { setError(null); await signInWithPopup(auth, googleProvider); } 
     catch (err) { setError(err.message); }
@@ -523,13 +379,7 @@ export default function App() {
 
   const addTask = async () => {
     if (!newTaskText.trim() || !activeFile) return;
-    // Modified to include createdAt for calendar logic
-    const updatedTasks = [...(activeFile.tasks || []), { 
-      id: crypto.randomUUID(), 
-      text: newTaskText, 
-      completed: false,
-      createdAt: Date.now() 
-    }];
+    const updatedTasks = [...(activeFile.tasks || []), { id: crypto.randomUUID(), text: newTaskText, completed: false }];
     await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
     setNewTaskText('');
   };
@@ -606,13 +456,6 @@ export default function App() {
             {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
           
-          <button 
-            onClick={handleExportToCalendar}
-            className="w-full flex items-center justify-center gap-2 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all text-sm shadow-md active:scale-95"
-          >
-            <Calendar size={18} /> Carregar na Agenda
-          </button>
-
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"><Plus size={18} /> Novo Documento</button>
 
           <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">

@@ -32,7 +32,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -255,7 +255,11 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
-      setError(`Erro ao gerar áudio: ${err.message}`);
+      if (err.message.includes("Quota") || err.message.includes("429")) {
+        setError("Cota de áudio gratuito excedida temporariamente. Aguarde 1 minuto e tente novamente.");
+      } else {
+        setError(`Erro ao gerar áudio: ${err.message}`);
+      }
     } finally {
       setIsGeneratingAudio(false);
     }
@@ -303,7 +307,13 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
-      if (!isAuto) setError(`Erro na IA: ${err.message}`);
+      if (!isAuto) {
+        if (err.message.includes("Quota") || err.message.includes("429")) {
+          setError("Muitos pedidos recentes. A IA precisa descansar por um minuto.");
+        } else {
+          setError(`Erro na IA: ${err.message}`);
+        }
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -445,8 +455,13 @@ export default function App() {
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}
             {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
+          
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"><Plus size={18} /> Novo Documento</button>
-          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer"><Upload size={14} /> Importar .txt<input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" /></label>
+
+          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">
+            <Upload size={14} /> Importar .txt
+            <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
+          </label>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
@@ -478,11 +493,11 @@ export default function App() {
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                   <div className="flex items-center gap-4 md:gap-6"><div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={24} className="md:w-10 md:h-10" /></div><div><h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p></div></div>
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    {/* BOTÃO OUVIR: Só aparece se audioUrl existir */}
+                    {/* BOTÃO OUVIR */}
                     {audioUrl && (
                       <button onClick={() => toggleAudio()} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>{isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>
                     )}
-                    {/* BOTÃO CRIAR ÁUDIO: Só aparece se tiver resumo e NÃO tiver audio ainda */}
+                    {/* BOTÃO CRIAR ÁUDIO */}
                     {!audioUrl && aiSummary && (
                       <button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>
                     )}

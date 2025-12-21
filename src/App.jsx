@@ -45,7 +45,6 @@ const GoogleIcon = () => (
 );
 
 // --- UTILITÁRIO DE ÁUDIO ---
-// Converte os dados brutos PCM da IA em um arquivo WAV tocável
 const pcmToWav = (pcmData, sampleRate = 24000) => {
   const numChannels = 1;
   const bitsPerSample = 16;
@@ -55,7 +54,6 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
-  // Escreve cabeçalho WAV
   const writeString = (view, offset, string) => {
     for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
   };
@@ -74,7 +72,6 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   writeString(view, 36, 'data');
   view.setUint32(40, dataSize, true);
 
-  // Escreve os dados
   const pcmBytes = new Uint8Array(pcmData);
   const wavBytes = new Uint8Array(buffer, 44);
   wavBytes.set(pcmBytes);
@@ -93,7 +90,6 @@ export default function App() {
   const [error, setError] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
-  // Estados de IA e Áudio
   const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -105,7 +101,6 @@ export default function App() {
   const [localContent, setLocalContent] = useState('');
   const isTypingRef = useRef(false);
 
-  // Injetor de Estilo
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -150,7 +145,6 @@ export default function App() {
     }
   }, [activeFileId, activeFile?.content]);
 
-  // Player de Áudio
   useEffect(() => {
     if (audioUrl && !audioRef.current) {
       audioRef.current = new Audio(audioUrl);
@@ -393,59 +387,15 @@ export default function App() {
   );
 
   if (!user) return (
-    <div 
-      className="bg-slate-50 font-sans"
-      style={{ 
-        height: '100vh', 
-        width: '100vw', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        padding: '1.5rem', 
-        position: 'fixed', 
-        top: 0, 
-        left: 0, 
-        backgroundColor: '#f8fafc'
-      }}
-    >
-      <div 
-        className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500"
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '3rem',
-          padding: '3rem',
-          maxWidth: '28rem',
-          width: '100%',
-          textAlign: 'center',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-        }}
-      >
-        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
-          <FileText size={48} className="text-white" />
-        </div>
+    <div className="bg-slate-50 font-sans" style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'fixed', top: 0, left: 0, backgroundColor: '#f8fafc' }}>
+      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ backgroundColor: 'white', borderRadius: '3rem', padding: '3rem', maxWidth: '28rem', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={48} className="text-white" /></div>
         <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
         <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
         
         {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
 
-        <button 
-          onClick={handleLogin} 
-          className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '1rem',
-            width: '100%',
-            padding: '1rem 1.5rem',
-            backgroundColor: 'white',
-            border: '2px solid #e2e8f0',
-            borderRadius: '1rem',
-            fontWeight: 'bold',
-            color: '#334155',
-            cursor: 'pointer'
-          }}
-        >
+        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', fontWeight: 'bold', color: '#334155', cursor: 'pointer' }}>
           <GoogleIcon /> <span>Entrar com conta Google</span>
         </button>
 
@@ -472,7 +422,7 @@ export default function App() {
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
               isGenerating 
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                // AQUI ESTÁ A CORREÇÃO: ROXINHO SEMPRE, MESMO SE JÁ TIVER RESUMO
+                // CORRIGIDO: Sempre roxo/indigo, a menos que esteja gerando.
                 : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
             }`}
           >
@@ -546,8 +496,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {/* BOTÃO OUVIR */}
-                    {aiSummary && (
+                    {/* BOTÃO OUVIR - SÓ APARECE SE TIVER AUDIO */}
+                    {audioUrl && (
                       <button 
                         onClick={() => toggleAudio()}
                         disabled={isGeneratingAudio}
@@ -557,17 +507,17 @@ export default function App() {
                             : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
                         }`}
                       >
-                        {isGeneratingAudio ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}
+                        {isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir Resumo</>}
                       </button>
                     )}
-                    {/* BOTÃO GERAR ÁUDIO */}
+                    {/* BOTÃO GERAR ÁUDIO - SÓ APARECE SE NÃO TIVER AUDIO E TIVER RESUMO */}
                     {!audioUrl && aiSummary && (
                       <button 
                         onClick={() => generateAudio(aiSummary)}
                         disabled={isGeneratingAudio}
                         className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
                       >
-                        {isGeneratingAudio ? "Criando..." : "Criar Áudio"}
+                        {isGeneratingAudio ? "Criando Áudio..." : "Criar Áudio"}
                       </button>
                     )}
                     <button 

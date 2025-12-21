@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
-  User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, BookOpen
+  User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
+  BookOpen, Play, Pause, Volume2
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -29,7 +30,7 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
-// ATENÇÃO: Para funcionar no Vercel, cole sua chave do Google AI Studio abaixo
+// ATENÇÃO: Esta linha conecta o código à chave que você colocou no Vercel
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
@@ -53,13 +54,19 @@ export default function App() {
   const [error, setError] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
+  // Estados de IA e Áudio
   const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef(null);
 
   const [localContent, setLocalContent] = useState('');
   const isTypingRef = useRef(false);
 
+  // Injetor de Estilo
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -83,12 +90,11 @@ export default function App() {
       return;
     }
 
-    const filesRef = collection(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files');
+    const filesRef = collection(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files');
     const unsubscribe = onSnapshot(filesRef, (snapshot) => {
       const filesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const sorted = filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       setFiles(sorted);
-      // Passa true para indicar que é uma verificação inicial
       checkAndTriggerAutoSummary(sorted, true);
     }, (err) => {
       console.error(err);
@@ -105,28 +111,111 @@ export default function App() {
     }
   }, [activeFileId, activeFile?.content]);
 
+  // Player de Áudio
+  useEffect(() => {
+    if (audioUrl && !audioRef.current) {
+      audioRef.current = new Audio(audioUrl);
+      audioRef.current.onended = () => setIsPlaying(false);
+    }
+  }, [audioUrl]);
+
+  const toggleAudio = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
   const checkAndTriggerAutoSummary = async (currentFiles, isInitialLoad = false) => {
     if (currentFiles.length === 0 || !apiKey) return;
     
     const today = new Date().toLocaleDateString();
-    const summaryRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
+    const summaryRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
     
     try {
       const docSnap = await getDoc(summaryRef);
       const data = docSnap.exists() ? docSnap.data() : null;
       
       if (!data || data.date !== today) {
-        // Se for carregamento inicial e não tiver resumo, gera.
-        // Se for atualização de snapshot (ex: digitando), evitamos gerar automaticamente para não gastar quota.
         if (isInitialLoad) {
            generateAISummary(currentFiles, true);
         }
       } else {
-        // Se já existe, carrega para o estado para que o botão "Ver Resumo" funcione
         setAiSummary(data.text);
       }
     } catch (e) {
       console.error("Erro ao verificar recorrência:", e);
+    }
+  };
+
+  const generateAudio = async (text) => {
+    if (!text) return;
+    if (!apiKey) {
+      setError("Erro: Chave de API não configurada no Vercel.");
+      return;
+    }
+    
+    setIsGeneratingAudio(true);
+    setError(null);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setAudioUrl(null);
+    setIsPlaying(false);
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: text }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: "Kore"
+                }
+              }
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+
+      const audioContent = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (audioContent) {
+        const binaryString = window.atob(audioContent);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes.buffer], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        // Toca automaticamente quando pronto
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => setIsPlaying(false);
+        audio.play();
+        setIsPlaying(true);
+      } else {
+        throw new Error("Áudio não gerado.");
+      }
+
+    } catch (err) {
+      console.error(err);
+      setError(`Erro ao gerar áudio: ${err.message}`);
+    } finally {
+      setIsGeneratingAudio(false);
     }
   };
 
@@ -135,13 +224,14 @@ export default function App() {
     setIsGenerating(true);
     if (!isAuto) setCurrentView('ai-summary');
     setError(null);
+    setAudioUrl(null);
 
     const allContent = filesToAnalyze.map(f => {
       const tasks = f.tasks?.map(t => `[${t.completed ? 'Concluído' : 'Pendente'}] ${t.text}`).join(', ') || 'Sem tarefas';
       return `Arquivo: ${f.name}\nConteúdo: ${f.content}\nTarefas: ${tasks}`;
     }).join('\n\n---\n\n');
 
-    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas e crie um 'Resumo da Manhã' incrível. 1. Comece com uma saudação. 2. Liste os tópicos principais. 3. Destaque pendências urgentes. 4. Dê uma dica para o dia. Use Markdown.";
+    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas e crie um 'Resumo da Manhã'. 1. Comece com uma saudação. 2. Liste os tópicos principais. 3. Destaque pendências urgentes. 4. Dê uma dica para o dia. Use Markdown. Seja conciso para leitura em voz alta.";
     const userQuery = `Aqui estão meus dados:\n\n${allContent}\n\nFaça meu resumo matinal.`;
 
     try {
@@ -162,7 +252,7 @@ export default function App() {
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       setAiSummary(result);
 
-      const summaryRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
+      const summaryRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
       await setDoc(summaryRef, {
         text: result,
         date: new Date().toLocaleDateString(),
@@ -190,12 +280,12 @@ export default function App() {
     catch (err) { setError(err.message); }
   };
 
-  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); });
+  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); });
 
   const createNewFile = async (name, content = "") => {
     if (!user || !name) return;
     const fileId = crypto.randomUUID();
-    const fileRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', fileId);
+    const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fileId);
     await setDoc(fileRef, {
       name: name.endsWith('.txt') ? name : `${name}.txt`,
       content: content,
@@ -223,30 +313,30 @@ export default function App() {
   const updateFileContent = async (content) => {
     if (!user || !activeFileId) return;
     setLocalContent(content); 
-    const fileRef = doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
+    const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
     await updateDoc(fileRef, { content, updatedAt: Date.now() });
   };
 
   const deleteFile = async (id) => {
-    await deleteDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', id));
+    await deleteDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id));
     if (activeFileId === id) setActiveFileId(null);
   };
 
   const addTask = async () => {
     if (!newTaskText.trim() || !activeFile) return;
     const updatedTasks = [...(activeFile.tasks || []), { id: crypto.randomUUID(), text: newTaskText, completed: false }];
-    await updateDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
     setNewTaskText('');
   };
 
   const toggleTask = async (taskId) => {
     const updatedTasks = activeFile.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
-    await updateDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
   };
 
   const removeTask = async (taskId) => {
     const updatedTasks = activeFile.tasks.filter(t => t.id !== taskId);
-    await updateDoc(doc(db, 'artifacts', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
   };
 
   const calculateProgress = (file) => {
@@ -291,14 +381,8 @@ export default function App() {
         <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
           <FileText size={48} className="text-white" />
         </div>
-        
-        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>
-          TXT Manager
-        </h1>
-        
-        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>
-          Organize suas notas e tarefas em qualquer lugar com segurança total.
-        </p>
+        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
+        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
         
         {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
 
@@ -320,13 +404,10 @@ export default function App() {
             cursor: 'pointer'
           }}
         >
-          <GoogleIcon /> 
-          <span>Entrar com conta Google</span>
+          <GoogleIcon /> <span>Entrar com conta Google</span>
         </button>
 
-        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>
-          Acesso Multi-usuário
-        </p>
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
       </div>
     </div>
   );
@@ -349,11 +430,13 @@ export default function App() {
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
               isGenerating 
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
+                : aiSummary 
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                  : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
             }`}
           >
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}
-            {isGenerating ? "Gerando..." : "Resumo do Dia (IA)"}
+            {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
           
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm">
@@ -413,7 +496,7 @@ export default function App() {
                 <button onClick={() => setCurrentView('files')} className="mb-6 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group text-sm">
                   <ChevronLeft size={18} className="group-hover:scale-110" /> Voltar para Arquivos
                 </button>
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start flex-wrap gap-4">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={42} /></div>
                     <div>
@@ -421,14 +504,39 @@ export default function App() {
                       <p className="text-slate-400 font-medium italic mt-1 text-sm md:text-base">Análise inteligente automatizada</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => generateAISummary(files, true)}
-                    className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
-                    title="Atualizar Resumo com novas informações"
-                  >
-                    <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
-                    Regenerar
-                  </button>
+                  <div className="flex gap-2">
+                    {/* BOTÃO OUVIR */}
+                    {aiSummary && (
+                      <button 
+                        onClick={() => toggleAudio()}
+                        disabled={isGeneratingAudio}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                          isPlaying 
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100' 
+                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {isGeneratingAudio ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}
+                      </button>
+                    )}
+                    {/* BOTÃO GERAR ÁUDIO */}
+                    {!audioUrl && aiSummary && (
+                      <button 
+                        onClick={() => generateAudio(aiSummary)}
+                        disabled={isGeneratingAudio}
+                        className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
+                      >
+                        {isGeneratingAudio ? "Criando..." : "Criar Áudio"}
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => generateAISummary(files, true)}
+                      className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                    >
+                      <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
+                      Regenerar
+                    </button>
+                  </div>
                 </div>
               </div>
 

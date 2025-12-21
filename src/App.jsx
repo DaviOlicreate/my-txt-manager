@@ -32,7 +32,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -231,7 +231,6 @@ export default function App() {
 
       const audioContent = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (audioContent) {
-        // Decodificação Base64
         const binaryString = window.atob(audioContent);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
@@ -239,14 +238,12 @@ export default function App() {
           bytes[i] = binaryString.charCodeAt(i);
         }
         
-        // CORREÇÃO CRUCIAL: Adicionar cabeçalho WAV aos dados PCM
         const wavBuffer = pcmToWav(bytes); 
         const blob = new Blob([wavBuffer], { type: 'audio/wav' });
         
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
         
-        // Toca automaticamente
         const audio = new Audio(url);
         audioRef.current = audio;
         audio.onended = () => setIsPlaying(false);
@@ -276,7 +273,7 @@ export default function App() {
       return `Arquivo: ${f.name}\nConteúdo: ${f.content}\nTarefas: ${tasks}`;
     }).join('\n\n---\n\n');
 
-    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas e crie um 'Resumo da Manhã'. 1. Comece com uma saudação. 2. Liste os tópicos principais. 3. Destaque pendências urgentes. 4. Dê uma dica para o dia. Use Markdown. Seja conciso para leitura em voz alta.";
+    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas e crie um 'Resumo da Manhã' incrível. 1. Comece com uma saudação. 2. Liste os tópicos principais. 3. Destaque pendências urgentes. 4. Dê uma dica para o dia. Use Markdown. Seja conciso para leitura em voz alta.";
     const userQuery = `Aqui estão meus dados:\n\n${allContent}\n\nFaça meu resumo matinal.`;
 
     try {
@@ -475,9 +472,8 @@ export default function App() {
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
               isGenerating 
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : aiSummary 
-                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                  : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
+                // AQUI ESTÁ A CORREÇÃO: ROXINHO SEMPRE, MESMO SE JÁ TIVER RESUMO
+                : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
             }`}
           >
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}

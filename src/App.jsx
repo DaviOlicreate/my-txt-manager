@@ -3,7 +3,7 @@ import {
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
   User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
-  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo, Calendar, Check
+  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo, Calendar
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -27,17 +27,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// CONFIGURAÇÃO DO PROVEDOR GOOGLE COM ESCOPO DE AGENDA
 const googleProvider = new GoogleAuthProvider();
-// Adiciona permissão para criar eventos na agenda do usuário
-googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
-
 const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -84,28 +79,32 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   return buffer;
 };
 
-// --- UTILITÁRIOS DE AGENDA (.ICS - FALLBACK) ---
+// --- UTILITÁRIOS DE AGENDA (.ICS) ---
 const formatICSDate = (isoString) => {
   if (!isoString) return '';
+  // Remove caracteres não alfanuméricos e formata para UTC
   return isoString.replace(/[-:]/g, '').split('.')[0] + 'Z';
 };
 
 const generateCalendarFile = (events) => {
   let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//TXT Manager//PT\n";
+  
   events.forEach(evt => {
     icsContent += "BEGIN:VEVENT\n";
     icsContent += `SUMMARY:${evt.summary}\n`;
     icsContent += `DTSTART:${formatICSDate(evt.dtStart)}\n`;
     icsContent += `DTEND:${formatICSDate(evt.dtEnd)}\n`;
-    icsContent += `DESCRIPTION:Gerado por TXT Manager\n`;
+    icsContent += `DESCRIPTION:Tarefa gerada via TXT Manager AI\n`;
     icsContent += "END:VEVENT\n";
   });
+  
   icsContent += "END:VCALENDAR";
+  
   const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', 'tarefas.ics');
+  link.setAttribute('download', 'minhas_tarefas.ics');
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -113,7 +112,6 @@ const generateCalendarFile = (events) => {
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState(null); // Token para API do Google
   const [files, setFiles] = useState([]);
   const [activeFileId, setActiveFileId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -121,18 +119,18 @@ export default function App() {
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [error, setError] = useState(null);
-  const [successMsg, setSuccessMsg] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
   // Estado para controle do Menu Mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Estado para Abas no Mobile (Editor ou Tarefas)
   const [activeMobileTab, setActiveMobileTab] = useState('editor');
   
   const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-  const [isExportingCalendar, setIsExportingCalendar] = useState(false);
+  const [isExportingCalendar, setIsExportingCalendar] = useState(false); // Novo estado
   const [audioUrl, setAudioUrl] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(null);
@@ -163,13 +161,17 @@ export default function App() {
       setFiles([]);
       return;
     }
+
     const filesRef = collection(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files');
     const unsubscribe = onSnapshot(filesRef, (snapshot) => {
       const filesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const sorted = filesData.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       setFiles(sorted);
       checkAndTriggerAutoSummary(sorted, true);
-    }, (err) => console.error(err));
+    }, (err) => {
+      console.error(err);
+    });
+
     return () => unsubscribe();
   }, [user]);
 
@@ -190,232 +192,403 @@ export default function App() {
 
   const toggleAudio = () => {
     if (!audioRef.current) return;
-    if (isPlaying) audioRef.current.pause();
-    else audioRef.current.play();
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
     setIsPlaying(!isPlaying);
   };
 
   const checkAndTriggerAutoSummary = async (currentFiles, isInitialLoad = false) => {
     if (currentFiles.length === 0 || !apiKey) return;
+    
     const today = new Date().toLocaleDateString();
     const summaryRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
+    
     try {
       const docSnap = await getDoc(summaryRef);
       const data = docSnap.exists() ? docSnap.data() : null;
+      
       if (!data || data.date !== today) {
-        if (isInitialLoad) generateAISummary(currentFiles, true);
+        if (isInitialLoad) {
+           generateAISummary(currentFiles, true);
+        }
       } else {
         setAiSummary(data.text);
       }
-    } catch (e) { console.error("Erro recorrência:", e); }
+    } catch (e) {
+      console.error("Erro ao verificar recorrência:", e);
+    }
   };
 
   const generateAudio = async (text) => {
-    if (!text || !apiKey) return;
+    if (!text) return;
+    if (!apiKey) {
+      setError("Erro: Chave de API não configurada. Verifique o código.");
+      return;
+    }
+    
     setIsGeneratingAudio(true);
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    setError(null);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     setAudioUrl(null);
     setIsPlaying(false);
+
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: text }] }],
-          generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } }
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: "Kore"
+                }
+              }
+            }
+          }
         })
       });
+
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
+
       const audioContent = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (audioContent) {
         const binaryString = window.atob(audioContent);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
         const wavBuffer = pcmToWav(bytes); 
-        const url = URL.createObjectURL(new Blob([wavBuffer], { type: 'audio/wav' }));
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        
+        const url = URL.createObjectURL(blob);
         setAudioUrl(url);
+        
         const audio = new Audio(url);
         audioRef.current = audio;
         audio.onended = () => setIsPlaying(false);
-        audio.play().catch(e => console.error(e));
+        audio.play().catch(e => console.error("Autoplay bloqueado:", e));
         setIsPlaying(true);
+      } else {
+        throw new Error("Áudio não gerado pela IA.");
       }
-    } catch (err) { setError(`Erro áudio: ${err.message}`); } 
-    finally { setIsGeneratingAudio(false); }
+
+    } catch (err) {
+      console.error(err);
+      if (err.message.includes("Quota") || err.message.includes("429")) {
+        setError("Cota de áudio gratuito excedida temporariamente. Aguarde 1 minuto e tente novamente.");
+      } else {
+        setError(`Erro ao gerar áudio: ${err.message}`);
+      }
+    } finally {
+      setIsGeneratingAudio(false);
+    }
   };
 
   const generateAISummary = async (filesToAnalyze = files, isAuto = false) => {
-    if (filesToAnalyze.length === 0 || !apiKey) return;
+    if (filesToAnalyze.length === 0) return;
     setIsGenerating(true);
     if (!isAuto) setCurrentView('ai-summary');
     setError(null);
     setAudioUrl(null);
+
     const allContent = filesToAnalyze.map(f => {
-      const tasks = f.tasks?.map(t => `[${t.completed ? 'Feito' : 'Pendente'}] ${t.text}`).join(', ') || 'Nenhuma';
-      return `Arquivo: ${f.name}\n${f.content}\nTarefas: ${tasks}`;
-    }).join('\n---\n');
-    const systemPrompt = "Você é um mentor de produtividade. Crie um 'Resumo da Manhã' conciso. Saudação, tópicos principais, pendências urgentes e dica do dia. Use Markdown.";
+      const tasks = f.tasks?.map(t => `[${t.completed ? 'Concluído' : 'Pendente'}] ${t.text}`).join(', ') || 'Sem tarefas';
+      return `Arquivo: ${f.name}\nConteúdo: ${f.content}\nTarefas: ${tasks}`;
+    }).join('\n\n---\n\n');
+
+    const systemPrompt = "Você é um mentor de produtividade. Analise os arquivos e tarefas e crie um 'Resumo da Manhã' incrível. 1. Comece com uma saudação. 2. Liste os tópicos principais. 3. Destaque pendências urgentes. 4. Dê uma dica para o dia. Use Markdown. Seja conciso para leitura em voz alta.";
+    const userQuery = `Aqui estão meus dados:\n\n${allContent}\n\nFaça meu resumo matinal.`;
+
     try {
+      if (!apiKey) throw new Error("API Key não encontrada.");
+      
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `Dados:\n${allContent}\n\nFaça o resumo.` }] }], systemInstruction: { parts: [{ text: systemPrompt }] } })
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userQuery }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
       });
+
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
+      
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       setAiSummary(result);
-      await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary'), { text: result, date: new Date().toLocaleDateString(), timestamp: Date.now() });
-    } catch (err) { if (!isAuto) setError(`Erro IA: ${err.message}`); } 
-    finally { setIsGenerating(false); }
+
+      const summaryRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'ai-data', 'last-summary');
+      await setDoc(summaryRef, {
+        text: result,
+        date: new Date().toLocaleDateString(),
+        timestamp: Date.now()
+      });
+
+    } catch (err) {
+      console.error(err);
+      if (!isAuto) {
+        if (err.message.includes("Quota") || err.message.includes("429")) {
+          setError("Muitos pedidos recentes. A IA precisa descansar por um minuto.");
+        } else {
+          setError(`Erro na IA: ${err.message}`);
+        }
+      }
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSidebarSummaryClick = () => {
-    if (aiSummary) setCurrentView('ai-summary');
-    else generateAISummary(files, false);
+    if (aiSummary) {
+      setCurrentView('ai-summary');
+    } else {
+      generateAISummary(files, false);
+    }
+    // No mobile, fecha o menu ao clicar
     setIsSidebarOpen(false);
   };
 
-  // --- NOVA FUNÇÃO DE EXPORTAÇÃO HÍBRIDA (API + ICS) ---
+  // --- NOVA FUNÇÃO DE EXPORTAÇÃO COM IA (GEMINI) ---
   const handleExportToCalendar = async () => {
-    if (!apiKey) { setError("Erro: Chave de API necessária."); return; }
-    
+    if (!apiKey) {
+      setError("Erro: Chave de API necessária para exportação inteligente.");
+      return;
+    }
+
     const tasksToProcess = [];
-    files.forEach(f => f.tasks?.forEach(t => !t.completed && tasksToProcess.push(t.text)));
-    if (tasksToProcess.length === 0) { setError("Nenhuma tarefa pendente para exportar."); return; }
+    files.forEach(file => {
+      if (file.tasks) {
+        file.tasks.forEach(t => {
+          if (!t.completed) tasksToProcess.push(t.text);
+        });
+      }
+    });
+
+    if (tasksToProcess.length === 0) {
+      setError("Nenhuma tarefa pendente para exportar.");
+      return;
+    }
 
     setIsExportingCalendar(true);
     setError(null);
-    setSuccessMsg(null);
 
-    const systemPrompt = `Você é um assistente de agendamento. Hoje é ${new Date().toISOString()}.
-    Analise as tarefas. Identifique data/hora. Se tiver duração, calcule fim. Se for prazo ("até 10h"), início é agora.
-    Retorne JSON Array: { "summary": "Título", "dtStart": "ISO String", "dtEnd": "ISO String" }.
-    Ignore tarefas sem tempo.`;
+    const nowISO = new Date().toISOString();
+    const systemPrompt = `Você é um assistente de agendamento.
+    Hoje é: ${nowISO} (Data ISO).
+    Analise a lista de tarefas do usuário. Identifique quais possuem intenção de data/hora.
+    Se a tarefa tiver duração (ex: '2h', '30min'), calcule o fim. Se não tiver, assuma 1h.
+    Se for um prazo ('até 10h'), o início é AGORA e o fim é o prazo.
+    Retorne APENAS um JSON Array válido. Sem markdown.
+    Formato do objeto: { "summary": "Título", "dtStart": "ISO String", "dtEnd": "ISO String" }
+    Ignore tarefas sem indicação temporal.`;
+
+    const userQuery = `Tarefas:\n${tasksToProcess.join('\n')}`;
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `Tarefas:\n${tasksToProcess.join('\n')}` }] }],
+          contents: [{ parts: [{ text: userQuery }] }],
           systemInstruction: { parts: [{ text: systemPrompt }] },
           generationConfig: { responseMimeType: "application/json" }
         })
       });
+
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
-      const events = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
 
-      if (!events || events.length === 0) {
-        setError("Nenhuma tarefa com horário encontrada pela IA.");
+      const jsonString = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const events = JSON.parse(jsonString);
+
+      if (events && events.length > 0) {
+        generateCalendarFile(events);
       } else {
-        // TENTA USAR API DO GOOGLE PRIMEIRO
-        if (googleAccessToken) {
-          let addedCount = 0;
-          for (const evt of events) {
-             try {
-               await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-                 method: 'POST',
-                 headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                   summary: evt.summary,
-                   start: { dateTime: evt.dtStart },
-                   end: { dateTime: evt.dtEnd }
-                 })
-               });
-               addedCount++;
-             } catch (e) { console.error("Falha API Calendar:", e); }
-          }
-          setSuccessMsg(`${addedCount} eventos adicionados ao seu Google Calendar!`);
-        } else {
-          // FALLBACK PARA ARQUIVO ICS
-          generateCalendarFile(events);
-          setSuccessMsg("Arquivo de agenda gerado! Importe-o no Google Calendar.");
-        }
+        setError("Nenhuma tarefa com data/horário foi identificada pela IA.");
+        setTimeout(() => setError(null), 4000);
       }
-    } catch (err) { setError(`Erro exportação: ${err.message}`); } 
-    finally { setIsExportingCalendar(false); setIsSidebarOpen(false); setTimeout(() => setSuccessMsg(null), 5000); }
+
+    } catch (err) {
+      console.error("Erro Calendar IA:", err);
+      setError(`Erro na exportação: ${err.message}`);
+    } finally {
+      setIsExportingCalendar(false);
+      setIsSidebarOpen(false);
+    }
   };
 
   const handleLogin = async () => {
-    try { 
-      setError(null); 
-      const result = await signInWithPopup(auth, googleProvider);
-      // CAPTURA O TOKEN DE ACESSO DO GOOGLE PARA A API DE CALENDÁRIO
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential) setGoogleAccessToken(credential.accessToken);
-    } 
+    try { setError(null); await signInWithPopup(auth, googleProvider); } 
     catch (err) { setError(err.message); }
   };
 
-  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); setGoogleAccessToken(null); });
+  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); });
 
-  // Funções CRUD (createNewFile, etc) mantidas iguais...
-  const createNewFile = async (name) => {
+  const createNewFile = async (name, content = "") => {
     if (!user || !name) return;
-    const id = crypto.randomUUID();
-    await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id), {
-      name: name.endsWith('.txt') ? name : `${name}.txt`, content: "", tasks: [], createdAt: Date.now(), updatedAt: Date.now()
+    const fileId = crypto.randomUUID();
+    const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fileId);
+    await setDoc(fileRef, {
+      name: name.endsWith('.txt') ? name : `${name}.txt`,
+      content: content,
+      tasks: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     });
-    setActiveFileId(id); setShowNewFileDialog(false); setNewFileName(''); setCurrentView('files'); setIsSidebarOpen(false);
+    setActiveFileId(fileId);
+    setShowNewFileDialog(false);
+    setNewFileName('');
+    setCurrentView('files');
+    setIsSidebarOpen(false); // Fecha menu mobile
   };
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0]; if(!file) return;
-    const r = new FileReader(); r.onload = (ev) => createNewFile(file.name, ev.target.result); r.readAsText(file); e.target.value = null;
-  };
-  const updateFileContent = async (c) => { 
-    if (!user || !activeFileId) return; setLocalContent(c); 
-    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { content: c, updatedAt: Date.now() }); 
-  };
-  const deleteFile = async (id) => { await deleteDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id)); if(activeFileId === id) setActiveFileId(null); };
-  const addTask = async () => { if(!newTaskText.trim()) return; await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: [...(activeFile.tasks||[]), { id: crypto.randomUUID(), text: newTaskText, completed: false }] }); setNewTaskText(''); };
-  const toggleTask = async (id) => { await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: activeFile.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t) }); };
-  const removeTask = async (id) => { await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: activeFile.tasks.filter(t => t.id !== id) }); };
-  const calculateProgress = (f) => (!f.tasks || f.tasks.length === 0) ? 0 : Math.round((f.tasks.filter(t => t.completed).length / f.tasks.length) * 100);
 
-  if (isLoadingAuth) return <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', position: 'fixed', inset: 0 }}><Loader2 className="animate-spin text-indigo-600" /></div>;
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      createNewFile(file.name, e.target.result);
+    };
+    reader.readAsText(file);
+    event.target.value = null; 
+  };
+
+  const updateFileContent = async (content) => {
+    if (!user || !activeFileId) return;
+    setLocalContent(content); 
+    const fileRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId);
+    await updateDoc(fileRef, { content, updatedAt: Date.now() });
+  };
+
+  const deleteFile = async (id) => {
+    await deleteDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id));
+    if (activeFileId === id) setActiveFileId(null);
+  };
+
+  const addTask = async () => {
+    if (!newTaskText.trim() || !activeFile) return;
+    // Modified to include createdAt for calendar logic
+    const updatedTasks = [...(activeFile.tasks || []), { 
+      id: crypto.randomUUID(), 
+      text: newTaskText, 
+      completed: false,
+      createdAt: Date.now() 
+    }];
+    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+    setNewTaskText('');
+  };
+
+  const toggleTask = async (taskId) => {
+    const updatedTasks = activeFile.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
+    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+  };
+
+  const removeTask = async (taskId) => {
+    const updatedTasks = activeFile.tasks.filter(t => t.id !== taskId);
+    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
+  };
+
+  const calculateProgress = (file) => {
+    if (!file.tasks || file.tasks.length === 0) return 0;
+    return Math.round((file.tasks.filter(t => t.completed).length / file.tasks.length) * 100);
+  };
+
+  if (isLoadingAuth) return (
+    <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', position: 'fixed', top: 0, left: 0 }}>
+      <Loader2 className="animate-spin text-indigo-600" />
+    </div>
+  );
 
   if (!user) return (
-    <div className="bg-slate-50 font-sans" style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'fixed', inset: 0 }}>
-      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ borderRadius: '3rem', padding: '3rem' }}>
-        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3"><FileText size={48} className="text-white" /></div>
-        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">TXT Manager</h1>
-        <p className="text-slate-500 mb-10 text-lg">Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
-        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex gap-2"><AlertCircle size={14} className="mt-0.5" /><span>{error}</span></div>}
-        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group"><GoogleIcon /> <span>Entrar com conta Google</span></button>
-        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Acesso Multi-usuário</p>
+    <div className="bg-slate-50 font-sans" style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'fixed', top: 0, left: 0, backgroundColor: '#f8fafc' }}>
+      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ backgroundColor: 'white', borderRadius: '3rem', padding: '3rem', maxWidth: '28rem', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={48} className="text-white" /></div>
+        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
+        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
+        
+        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
+
+        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', fontWeight: 'bold', color: '#334155', cursor: 'pointer' }}>
+          <GoogleIcon /> <span>Entrar com conta Google</span>
+        </button>
+
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
       </div>
     </div>
   );
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
-      {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 md:shadow-sm md:w-80 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      
+      {/* MENU MOBILE OVERLAY */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* BARRA LATERAL */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:shadow-sm md:w-80 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
-          <div className="flex-1 overflow-hidden"><h1 className="text-sm font-bold truncate">{user.displayName}</h1><button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline">Sair</button></div>
+          <div className="flex-1 overflow-hidden">
+            <h1 className="text-sm font-bold truncate">{user.displayName}</h1>
+            <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline">Sair</button>
+          </div>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
+
         <div className="p-4 space-y-2 border-b border-slate-50">
-          <button onClick={handleSidebarSummaryClick} disabled={files.length === 0 || isGenerating} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]">
+          <button 
+            onClick={handleSidebarSummaryClick}
+            disabled={files.length === 0 || isGenerating}
+            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
+              isGenerating 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
+            }`}
+          >
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}
             {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
-          <button onClick={handleExportToCalendar} disabled={isExportingCalendar} className="w-full flex items-center justify-center gap-2 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all text-sm shadow-md active:scale-95">
-            {isExportingCalendar ? <Loader2 size={18} className="animate-spin" /> : <Calendar size={18} />} {isExportingCalendar ? "Processando..." : "Carregar na Agenda"}
+          
+          <button 
+            onClick={handleExportToCalendar}
+            disabled={isExportingCalendar}
+            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all text-sm shadow-md active:scale-95 ${isExportingCalendar ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-white hover:bg-slate-900'}`}
+          >
+            {isExportingCalendar ? <Loader2 size={18} className="animate-spin" /> : <Calendar size={18} />}
+            {isExportingCalendar ? "Processando..." : "Carregar na Agenda"}
           </button>
+
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"><Plus size={18} /> Novo Documento</button>
-          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer"><Upload size={14} /> Importar .txt<input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" /></label>
+
+          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">
+            <Upload size={14} /> Importar .txt
+            <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
+          </label>
         </div>
+
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
-          <div className="text-[10px] font-black text-slate-400 px-2 py-4 uppercase tracking-widest flex justify-between"><span>Meus Ficheiros</span><span className="bg-slate-100 px-2 py-0.5 rounded-full text-slate-500">{files.length}</span></div>
+          <div className="text-[10px] font-black text-slate-400 px-2 py-4 uppercase tracking-widest flex justify-between items-center"><span>Meus Ficheiros</span><span className="bg-slate-100 px-2 py-0.5 rounded-full text-slate-500">{files.length}</span></div>
           {files.map(file => (
             <div key={file.id} onClick={() => { setActiveFileId(file.id); setCurrentView('files'); setIsSidebarOpen(false); }} className={`group flex flex-col p-3 rounded-xl cursor-pointer transition-all ${activeFileId === file.id && currentView === 'files' ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}>
-              <div className="flex items-center justify-between mb-1"><div className="flex items-center gap-3 overflow-hidden"><FileText size={18} /><span className="truncate font-medium text-sm">{file.name}</span></div><button onClick={(e) => { e.stopPropagation(); deleteFile(file.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-500"><Trash2 size={14} /></button></div>
-              {file.tasks?.length > 0 && <div className="flex items-center gap-2"><div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-indigo-400" style={{ width: `${calculateProgress(file)}%` }} /></div><span className="text-[8px] font-bold opacity-60">{calculateProgress(file)}%</span></div>}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-3 overflow-hidden"><FileText size={18} className={activeFileId === file.id ? 'text-indigo-500' : 'text-slate-400'} /><span className="truncate font-medium text-sm">{file.name}</span></div>
+                <button onClick={(e) => { e.stopPropagation(); deleteFile(file.id); }} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
+              </div>
+              {file.tasks?.length > 0 && (<div className="flex items-center gap-2"><div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-indigo-400 transition-all duration-500" style={{ width: `${calculateProgress(file)}%` }} /></div><span className="text-[8px] font-bold opacity-60">{calculateProgress(file)}%</span></div>)}
             </div>
           ))}
         </nav>
@@ -423,25 +596,34 @@ export default function App() {
 
       <main className="flex-1 flex flex-col bg-white overflow-hidden relative">
         <div className="md:hidden absolute top-4 left-4 z-30"><button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-white rounded-xl shadow-md border border-slate-100 text-slate-600"><Menu size={24} /></button></div>
-        {successMsg && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-50 text-emerald-600 px-6 py-3 rounded-2xl shadow-xl border border-emerald-100 flex items-center gap-3"><Check size={18} /><span className="text-sm font-bold">{successMsg}</span></div>}
-        {error && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex gap-3"><AlertCircle size={18} /><span className="text-xs md:text-sm font-bold">{error}</span><button onClick={() => setError(null)}><X size={14}/></button></div>}
+
+        {error && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3 w-11/12 md:w-auto"><AlertCircle size={18} className="shrink-0" /><span className="text-xs md:text-sm font-bold">{error}</span><button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-full"><X size={14}/></button></div>
+        )}
 
         {currentView === 'ai-summary' ? (
           <div className="flex-1 overflow-hidden p-4 md:p-12 bg-indigo-50/10 flex justify-center h-full pt-16 md:pt-12">
             <div className="max-w-4xl w-full bg-white rounded-[2rem] md:rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden">
               <div className="p-6 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
-                <button onClick={() => setCurrentView('files')} className="mb-6 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 text-sm"><ChevronLeft size={18} /> Voltar para Arquivos</button>
+                <button onClick={() => setCurrentView('files')} className="mb-6 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group text-sm"><ChevronLeft size={18} className="group-hover:scale-110" /> Voltar para Arquivos</button>
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                  <div className="flex items-center gap-4"><div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl -rotate-3"><Brain size={24} className="md:w-10 md:h-10" /></div><div><h2 className="text-xl md:text-3xl font-black text-slate-800">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p></div></div>
+                  <div className="flex items-center gap-4 md:gap-6"><div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={24} className="md:w-10 md:h-10" /></div><div><h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p></div></div>
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    {audioUrl && <button onClick={toggleAudio} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>{isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>}
-                    {!audioUrl && aiSummary && <button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>}
-                    <button onClick={() => generateAISummary(files, true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold"><RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} /> Regenerar</button>
+                    {/* BOTÃO OUVIR */}
+                    {audioUrl && (
+                      <button onClick={() => toggleAudio()} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>{isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>
+                    )}
+                    {/* BOTÃO CRIAR ÁUDIO */}
+                    {!audioUrl && aiSummary && (
+                      <button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>
+                    )}
+                    <button onClick={() => generateAISummary(files, true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"><RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} /> Regenerar</button>
                   </div>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-6 md:p-12 pt-6 custom-scrollbar">
-                {isGenerating ? <div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded w-3/4 animate-pulse"></div><div className="h-64 bg-slate-50 rounded animate-pulse"></div></div> : aiSummary ? <div className="prose prose-indigo max-w-none text-slate-700 font-sans bg-indigo-50/20 p-6 md:p-10 rounded-[2rem] border border-indigo-100/50 whitespace-pre-wrap text-sm md:text-base">{aiSummary}</div> : <div className="text-center py-32"><p className="text-slate-400">Nada para mostrar.</p></div>}
+                {isGenerating ? (<div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div><div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div><div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div></div>) : aiSummary ? (<div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words text-sm md:text-base">{aiSummary}</div>) : (<div className="text-center py-32"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div><p className="text-slate-400 font-medium">Nada para mostrar hoje ainda.</p></div>)}
+                <div className="mt-12 pt-8 border-t border-slate-100 text-center pb-8"><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">IA Recorrente Ativa</p></div>
               </div>
             </div>
           </div>
@@ -452,27 +634,56 @@ export default function App() {
                 <div className="flex items-center gap-3"><h2 className="text-lg md:text-xl font-bold text-slate-800 truncate">{activeFile.name}</h2><span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span></div>
                 <div className="flex items-center gap-3 mt-1.5"><div className="w-16 md:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[8px] md:text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}%</span></div>
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
+              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
             </header>
+            
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden h-full">
+              
               <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeMobileTab === 'editor' ? 'flex' : 'hidden md:flex'}`}>
-                {isEditing ? <textarea className="flex-1 p-4 md:p-8 border border-slate-100 rounded-[2rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => isTypingRef.current = true} onBlur={() => isTypingRef.current = false} onChange={(e) => updateFileContent(e.target.value)} /> : <div className="flex-1 p-6 md:p-10 bg-slate-50/30 rounded-[2rem] md:rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>}
+                <div className="mb-4 flex justify-between items-center shrink-0">
+                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Editor</h3>
+                   {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">EDITANDO</span>}
+                </div>
+                {isEditing ? (
+                  <textarea className="flex-1 p-4 md:p-8 border border-slate-100 rounded-[2rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => { isTypingRef.current = true; }} onBlur={() => { isTypingRef.current = false; }} onChange={(e) => updateFileContent(e.target.value)} placeholder="Comece a escrever..." />
+                ) : (
+                  <div className="flex-1 p-6 md:p-10 bg-slate-50/30 rounded-[2rem] md:rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar border-dashed">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>
+                )}
               </div>
+              
               <div className={`w-full md:w-96 bg-slate-50/50 p-6 md:p-8 flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-100 ${activeMobileTab === 'tasks' ? 'flex' : 'hidden md:flex'}`}>
-                <div className="mb-4 md:mb-8 shrink-0"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Tarefas</h3><div className="flex gap-2"><input type="text" className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} /><button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg active:scale-95"><Plus size={20} /></button></div></div>
-                <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1 pr-2">{activeFile.tasks?.map(task => (<div key={task.id} className={`group flex items-center gap-3 p-3 md:p-4 rounded-2xl border ${task.completed ? 'bg-emerald-50/40 border-emerald-100 text-slate-400' : 'bg-white border-slate-200'}`}><button onClick={() => toggleTask(task.id)} className="shrink-0">{task.completed ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Square size={20} className="text-slate-200 group-hover:text-indigo-400" />}</button><span className={`text-sm flex-1 ${task.completed ? 'line-through opacity-60' : ''}`}>{task.text}</span><button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100"><X size={14} /></button></div>))}</div>
+                <div className="mb-4 md:mb-8 shrink-0">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Tarefas</h3>
+                  <div className="flex gap-2">
+                    <input type="text" className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} />
+                    <button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={20} /></button>
+                  </div>
+                </div>
+                <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1 pr-2">
+                  {activeFile.tasks?.map(task => (
+                    <div key={task.id} className={`group flex items-center gap-3 p-3 md:p-4 rounded-2xl border transition-all ${task.completed ? 'bg-emerald-50/40 border-emerald-100 text-slate-400' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:border-indigo-200'}`}>
+                      <button onClick={() => toggleTask(task.id)} className="shrink-0 transition-transform active:scale-75">{task.completed ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Square size={20} className="text-slate-200 group-hover:text-indigo-400" />}</button>
+                      <span className={`text-sm flex-1 leading-snug font-medium ${task.completed ? 'line-through opacity-60' : ''}`}>{task.text}</span>
+                      <button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"><X size={14} /></button>
+                    </div>
+                  ))}
+                  {(!activeFile.tasks || activeFile.tasks.length === 0) && <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas.</div>}
+                </div>
               </div>
+
+              {/* MENU DE ABAS FLUTUANTE (SÓ NO MOBILE) */}
               <div className="md:hidden fixed bottom-8 left-1/2 -translate-x-1/2 bg-white shadow-2xl border border-slate-200 rounded-full p-1.5 flex items-center gap-1 z-50">
                 <button onClick={() => setActiveMobileTab('editor')} className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'editor' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}><PenTool size={16} /> Editor</button>
-                <button onClick={() => setActiveMobileTab('tasks')} className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}><ListTodo size={16} /> Tarefas {activeFile.tasks?.filter(t => !t.completed).length > 0 && <span className="bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full ml-1">{activeFile.tasks.filter(t => !t.completed).length}</span>}</button>
+                <button onClick={() => setActiveMobileTab('tasks')} className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}><ListTodo size={16} /> Tarefas {activeFile.tasks?.filter(t => !t.completed).length > 0 && (<span className="bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full ml-1">{activeFile.tasks.filter(t => !t.completed).length}</span>)}</button>
               </div>
+
             </div>
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 md:p-12 text-center bg-slate-50/20 h-full w-full overflow-hidden pt-16 md:pt-0">
-            <div className="w-24 h-24 bg-white rounded-[3rem] flex items-center justify-center mb-6 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100"><Cloud size={48} className="text-indigo-500 group-hover:scale-110" /></div>
-            <h2 className="text-2xl font-black text-slate-800 mb-2">Olá, {user.displayName?.split(' ')[0]}!</h2>
-            <p className="max-w-xs text-slate-500 text-sm font-medium">Seus documentos estão seguros.</p>
+            <div className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-[2rem] md:rounded-[3rem] flex items-center justify-center mb-6 md:mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100 group hover:rotate-0 transition-all duration-500"><Cloud size={48} className="text-indigo-500 group-hover:scale-110 transition-transform md:w-16 md:h-16" /></div>
+            <h2 className="text-2xl md:text-4xl font-black text-slate-800 mb-2 md:mb-4 tracking-tight">Olá, {user.displayName?.split(' ')[0]}!</h2>
+            <p className="max-w-xs md:max-w-md text-slate-500 leading-relaxed text-sm md:text-lg font-medium text-center">Seus documentos estão seguros. Escolha um arquivo no menu ou crie um novo.</p>
           </div>
         )}
       </main>
@@ -480,14 +691,21 @@ export default function App() {
       {showNewFileDialog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-[3rem] p-8 md:p-12 w-full max-w-md shadow-2xl border border-slate-100">
-            <h3 className="text-2xl font-black text-slate-800 mb-6 text-center">Criar Novo TXT</h3>
-            <input autoFocus type="text" className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-8 focus:ring-4 focus:ring-indigo-100" placeholder="Nome..." value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
-            <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl active:scale-95">Criar</button></div>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-6 md:mb-8 text-center tracking-tighter">Criar Novo TXT</h3>
+            <input autoFocus type="text" className="w-full px-6 py-4 md:py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-8 focus:ring-4 focus:ring-indigo-100 transition-all shadow-inner" placeholder="Ex: Projeto_Viagem.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
+            <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar</button></div>
           </div>
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; } .custom-scrollbar::-webkit-scrollbar { width: 5px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; } .break-words { overflow-wrap: break-word; }`}} />
+      <style dangerouslySetInnerHTML={{ __html: `
+        html, body, #root { height: 100vh !important; width: 100vw !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; position: fixed !important; top: 0; left: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+        .break-words { overflow-wrap: break-word; }
+      `}} />
     </div>
   );
 }

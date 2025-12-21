@@ -30,7 +30,8 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const PROJECT_ID = 'my-txt-manager';
 
-// ATENÇÃO: Esta linha conecta o código à chave que você colocou no Vercel
+// ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
+// const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
@@ -154,7 +155,7 @@ export default function App() {
   const generateAudio = async (text) => {
     if (!text) return;
     if (!apiKey) {
-      setError("Erro: Chave de API não configurada no Vercel.");
+      setError("Erro: Chave de API não configurada. Verifique o código.");
       return;
     }
     

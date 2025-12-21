@@ -3,7 +3,7 @@ import {
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
   User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
-  BookOpen, Play, Pause, Volume2, Menu
+  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -92,6 +92,8 @@ export default function App() {
   
   // Estado para controle do Menu Mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Estado para Abas no Mobile (Editor ou Tarefas)
+  const [activeMobileTab, setActiveMobileTab] = useState('editor');
   
   const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
@@ -394,72 +396,19 @@ export default function App() {
   );
 
   if (!user) return (
-    <div 
-      className="bg-slate-50 font-sans"
-      style={{ 
-        height: '100vh', 
-        width: '100vw', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        padding: '1.5rem', 
-        position: 'fixed', 
-        top: 0, 
-        left: 0, 
-        backgroundColor: '#f8fafc'
-      }}
-    >
-      <div 
-        className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500"
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '3rem',
-          padding: '3rem',
-          maxWidth: '28rem',
-          width: '100%',
-          textAlign: 'center',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-        }}
-      >
-        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
-          <FileText size={48} className="text-white" />
-        </div>
-        
-        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>
-          TXT Manager
-        </h1>
-        
-        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>
-          Organize suas notas e tarefas em qualquer lugar com segurança total.
-        </p>
+    <div className="bg-slate-50 font-sans" style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'fixed', top: 0, left: 0, backgroundColor: '#f8fafc' }}>
+      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ backgroundColor: 'white', borderRadius: '3rem', padding: '3rem', maxWidth: '28rem', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={48} className="text-white" /></div>
+        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
+        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
         
         {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
 
-        <button 
-          onClick={handleLogin} 
-          className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '1rem',
-            width: '100%',
-            padding: '1rem 1.5rem',
-            backgroundColor: 'white',
-            border: '2px solid #e2e8f0',
-            borderRadius: '1rem',
-            fontWeight: 'bold',
-            color: '#334155',
-            cursor: 'pointer'
-          }}
-        >
-          <GoogleIcon /> 
-          <span>Entrar com conta Google</span>
+        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', fontWeight: 'bold', color: '#334155', cursor: 'pointer' }}>
+          <GoogleIcon /> <span>Entrar com conta Google</span>
         </button>
 
-        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>
-          Acesso Multi-usuário
-        </p>
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
       </div>
     </div>
   );
@@ -467,32 +416,20 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
       
-      {/* MENU MOBILE OVERLAY (Fundo escuro quando menu abre) */}
+      {/* MENU MOBILE OVERLAY */}
       {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* BARRA LATERAL RESPONSIVA */}
-      <aside 
-        className={`
-          fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out
-          md:relative md:translate-x-0 md:shadow-sm md:w-80
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
-      >
+      {/* BARRA LATERAL */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:shadow-sm md:w-80 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
           <div className="flex-1 overflow-hidden">
             <h1 className="text-sm font-bold truncate">{user.displayName}</h1>
             <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline">Sair</button>
           </div>
-          {/* Botão fechar no mobile */}
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600">
-            <X size={20} />
-          </button>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
 
         <div className="p-4 space-y-2 border-b border-slate-50">
@@ -500,137 +437,53 @@ export default function App() {
             onClick={handleSidebarSummaryClick}
             disabled={files.length === 0 || isGenerating}
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
-              isGenerating 
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                // CORRIGIDO: Sempre roxo, mesmo se o resumo já existe
-                : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
+              isGenerating ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
             }`}
           >
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}
             {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
-          
-          <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm">
-            <Plus size={18} /> Novo Documento
-          </button>
-
-          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">
-            <Upload size={14} /> Importar .txt
-            <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
-          </label>
+          <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"><Plus size={18} /> Novo Documento</button>
+          <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer"><Upload size={14} /> Importar .txt<input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" /></label>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 pt-0 space-y-1 custom-scrollbar">
-          <div className="text-[10px] font-black text-slate-400 px-2 py-4 uppercase tracking-widest flex justify-between items-center">
-            <span>Meus Ficheiros</span>
-            <span className="bg-slate-100 px-2 py-0.5 rounded-full text-slate-500">{files.length}</span>
-          </div>
+          <div className="text-[10px] font-black text-slate-400 px-2 py-4 uppercase tracking-widest flex justify-between items-center"><span>Meus Ficheiros</span><span className="bg-slate-100 px-2 py-0.5 rounded-full text-slate-500">{files.length}</span></div>
           {files.map(file => (
-            <div 
-              key={file.id} 
-              onClick={() => { setActiveFileId(file.id); setCurrentView('files'); setIsSidebarOpen(false); }} 
-              className={`group flex flex-col p-3 rounded-xl cursor-pointer transition-all ${activeFileId === file.id && currentView === 'files' ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
-            >
+            <div key={file.id} onClick={() => { setActiveFileId(file.id); setCurrentView('files'); setIsSidebarOpen(false); }} className={`group flex flex-col p-3 rounded-xl cursor-pointer transition-all ${activeFileId === file.id && currentView === 'files' ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}>
               <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <FileText size={18} className={activeFileId === file.id ? 'text-indigo-500' : 'text-slate-400'} />
-                  <span className="truncate font-medium text-sm">{file.name}</span>
-                </div>
+                <div className="flex items-center gap-3 overflow-hidden"><FileText size={18} className={activeFileId === file.id ? 'text-indigo-500' : 'text-slate-400'} /><span className="truncate font-medium text-sm">{file.name}</span></div>
                 <button onClick={(e) => { e.stopPropagation(); deleteFile(file.id); }} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
               </div>
-              {file.tasks?.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-400 transition-all duration-500" style={{ width: `${calculateProgress(file)}%` }} />
-                  </div>
-                  <span className="text-[8px] font-bold opacity-60">{calculateProgress(file)}%</span>
-                </div>
-              )}
+              {file.tasks?.length > 0 && (<div className="flex items-center gap-2"><div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-indigo-400 transition-all duration-500" style={{ width: `${calculateProgress(file)}%` }} /></div><span className="text-[8px] font-bold opacity-60">{calculateProgress(file)}%</span></div>)}
             </div>
           ))}
         </nav>
       </aside>
 
       <main className="flex-1 flex flex-col bg-white overflow-hidden relative">
-        {/* BOTÃO DE MENU PARA MOBILE (Topo Esquerdo) */}
-        <div className="md:hidden absolute top-4 left-4 z-30">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 bg-white rounded-xl shadow-md border border-slate-100 text-slate-600"
-          >
-            <Menu size={24} />
-          </button>
-        </div>
+        <div className="md:hidden absolute top-4 left-4 z-30"><button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-white rounded-xl shadow-md border border-slate-100 text-slate-600"><Menu size={24} /></button></div>
 
         {error && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3 w-11/12 md:w-auto">
-            <AlertCircle size={18} className="shrink-0" />
-            <span className="text-xs md:text-sm font-bold">{error}</span>
-            <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-full"><X size={14}/></button>
-          </div>
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3 w-11/12 md:w-auto"><AlertCircle size={18} className="shrink-0" /><span className="text-xs md:text-sm font-bold">{error}</span><button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-full"><X size={14}/></button></div>
         )}
 
         {currentView === 'ai-summary' ? (
           <div className="flex-1 overflow-hidden p-4 md:p-12 bg-indigo-50/10 flex justify-center h-full pt-16 md:pt-12">
             <div className="max-w-4xl w-full bg-white rounded-[2rem] md:rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden">
               <div className="p-6 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
-                <button onClick={() => setCurrentView('files')} className="mb-6 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group text-sm">
-                  <ChevronLeft size={18} className="group-hover:scale-110" /> Voltar para Arquivos
-                </button>
+                <button onClick={() => setCurrentView('files')} className="mb-6 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group text-sm"><ChevronLeft size={18} className="group-hover:scale-110" /> Voltar para Arquivos</button>
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                  <div className="flex items-center gap-4 md:gap-6">
-                    <div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0">
-                      <Brain size={24} className="md:w-10 md:h-10" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2>
-                      <p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p>
-                    </div>
-                  </div>
+                  <div className="flex items-center gap-4 md:gap-6"><div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={24} className="md:w-10 md:h-10" /></div><div><h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p></div></div>
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    {/* BOTÃO OUVIR */}
-                    {aiSummary && (
-                      <button 
-                        onClick={() => toggleAudio()}
-                        disabled={isGeneratingAudio}
-                        className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
-                          isPlaying 
-                            ? 'bg-red-50 text-red-600 hover:bg-red-100' 
-                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                        }`}
-                      >
-                        {isGeneratingAudio ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}
-                      </button>
-                    )}
-                    {/* BOTÃO GERAR ÁUDIO */}
-                    {!audioUrl && aiSummary && (
-                      <button 
-                        onClick={() => generateAudio(aiSummary)}
-                        disabled={isGeneratingAudio}
-                        className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
-                      >
-                        {isGeneratingAudio ? "Criando..." : "Criar Áudio"}
-                      </button>
-                    )}
-                    <button 
-                      onClick={() => generateAISummary(files, true)}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
-                    >
-                      <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
-                      Regenerar
-                    </button>
+                    {aiSummary && (<button onClick={() => toggleAudio()} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>{isGeneratingAudio ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>)}
+                    {!audioUrl && aiSummary && (<button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>)}
+                    <button onClick={() => generateAISummary(files, true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"><RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} /> Regenerar</button>
                   </div>
                 </div>
               </div>
-
               <div className="flex-1 overflow-y-auto p-6 md:p-12 pt-6 custom-scrollbar">
-                {isGenerating ? (
-                  <div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div><div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div><div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div></div>
-                ) : aiSummary ? (
-                  <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words text-sm md:text-base">{aiSummary}</div>
-                ) : (
-                  <div className="text-center py-32"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div><p className="text-slate-400 font-medium">Nada para mostrar hoje ainda.</p></div>
-                )}
+                {isGenerating ? (<div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div><div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div><div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div></div>) : aiSummary ? (<div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words text-sm md:text-base">{aiSummary}</div>) : (<div className="text-center py-32"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div><p className="text-slate-400 font-medium">Nada para mostrar hoje ainda.</p></div>)}
                 <div className="mt-12 pt-8 border-t border-slate-100 text-center pb-8"><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">IA Recorrente Ativa</p></div>
               </div>
             </div>
@@ -639,22 +492,17 @@ export default function App() {
           <>
             <header className="h-20 border-b border-slate-100 px-4 md:px-8 flex items-center justify-between bg-white/80 backdrop-blur-md shadow-sm z-10 shrink-0 pl-16 md:pl-8">
               <div className="flex flex-col overflow-hidden mr-2">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg md:text-xl font-bold text-slate-800 truncate">{activeFile.name}</h2>
-                  <span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span>
-                </div>
-                <div className="flex items-center gap-3 mt-1.5">
-                   <div className="w-16 md:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div>
-                   <span className="text-[8px] md:text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}%</span>
-                </div>
+                <div className="flex items-center gap-3"><h2 className="text-lg md:text-xl font-bold text-slate-800 truncate">{activeFile.name}</h2><span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span></div>
+                <div className="flex items-center gap-3 mt-1.5"><div className="w-16 md:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[8px] md:text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}%</span></div>
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                {isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}
-              </button>
+              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
             </header>
+            
+            {/* LAYOUT HÍBRIDO: TABS NO MOBILE, LADO A LADO NO DESKTOP */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden h-full">
-              {/* ÁREA DE TEXTO */}
-              <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeFile.tasks?.length > 0 ? 'h-1/2 md:h-full' : 'h-full'}`}>
+              
+              {/* ÁREA DE TEXTO: Visível se Tab='editor' ou se for Desktop */}
+              <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeMobileTab === 'editor' ? 'flex' : 'hidden md:flex'}`}>
                 <div className="mb-4 flex justify-between items-center shrink-0">
                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Editor</h3>
                    {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">EDITANDO</span>}
@@ -666,8 +514,8 @@ export default function App() {
                 )}
               </div>
               
-              {/* ÁREA DE TAREFAS (Abaixo no mobile, ao lado no desktop) */}
-              <div className="w-full md:w-96 bg-slate-50/50 p-6 md:p-8 flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-100 h-1/2 md:h-full">
+              {/* ÁREA DE TAREFAS: Visível se Tab='tasks' ou se for Desktop */}
+              <div className={`w-full md:w-96 bg-slate-50/50 p-6 md:p-8 flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-100 ${activeMobileTab === 'tasks' ? 'flex' : 'hidden md:flex'}`}>
                 <div className="mb-4 md:mb-8 shrink-0">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Tarefas</h3>
                   <div className="flex gap-2">
@@ -686,6 +534,28 @@ export default function App() {
                   {(!activeFile.tasks || activeFile.tasks.length === 0) && <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas.</div>}
                 </div>
               </div>
+
+              {/* MENU DE ABAS FLUTUANTE (SÓ NO MOBILE) */}
+              <div className="md:hidden absolute bottom-6 left-1/2 -translate-x-1/2 bg-white shadow-2xl border border-slate-200 rounded-full p-1.5 flex items-center gap-1 z-20">
+                <button 
+                  onClick={() => setActiveMobileTab('editor')}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'editor' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <PenTool size={16} /> Editor
+                </button>
+                <button 
+                  onClick={() => setActiveMobileTab('tasks')}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <ListTodo size={16} /> Tarefas
+                  {activeFile.tasks?.filter(t => !t.completed).length > 0 && (
+                    <span className="bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full ml-1">
+                      {activeFile.tasks.filter(t => !t.completed).length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
             </div>
           </>
         ) : (

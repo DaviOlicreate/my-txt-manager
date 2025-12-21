@@ -3,7 +3,7 @@ import {
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
   User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
-  BookOpen, Play, Pause, Volume2
+  BookOpen, Play, Pause, Volume2, Menu
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -90,6 +90,9 @@ export default function App() {
   const [error, setError] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
+  // Estado para controle do Menu Mobile
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
   const [currentView, setCurrentView] = useState('files');
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -101,6 +104,7 @@ export default function App() {
   const [localContent, setLocalContent] = useState('');
   const isTypingRef = useRef(false);
 
+  // Injetor de Estilo
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -309,6 +313,8 @@ export default function App() {
     } else {
       generateAISummary(files, false);
     }
+    // No mobile, fecha o menu ao clicar
+    setIsSidebarOpen(false);
   };
 
   const handleLogin = async () => {
@@ -333,6 +339,7 @@ export default function App() {
     setShowNewFileDialog(false);
     setNewFileName('');
     setCurrentView('files');
+    setIsSidebarOpen(false); // Fecha menu mobile
   };
 
   const handleFileUpload = (event) => {
@@ -387,32 +394,105 @@ export default function App() {
   );
 
   if (!user) return (
-    <div className="bg-slate-50 font-sans" style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'fixed', top: 0, left: 0, backgroundColor: '#f8fafc' }}>
-      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ backgroundColor: 'white', borderRadius: '3rem', padding: '3rem', maxWidth: '28rem', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500"><FileText size={48} className="text-white" /></div>
-        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
-        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
+    <div 
+      className="bg-slate-50 font-sans"
+      style={{ 
+        height: '100vh', 
+        width: '100vw', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        padding: '1.5rem', 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        backgroundColor: '#f8fafc'
+      }}
+    >
+      <div 
+        className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500"
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '3rem',
+          padding: '3rem',
+          maxWidth: '28rem',
+          width: '100%',
+          textAlign: 'center',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+        }}
+      >
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 transform hover:rotate-0 transition-all duration-500">
+          <FileText size={48} className="text-white" />
+        </div>
+        
+        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>
+          TXT Manager
+        </h1>
+        
+        <p className="text-slate-500 mb-10 text-lg leading-relaxed" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>
+          Organize suas notas e tarefas em qualquer lugar com segurança total.
+        </p>
         
         {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex items-start gap-2"><AlertCircle size={14} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
 
-        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', fontWeight: 'bold', color: '#334155', cursor: 'pointer' }}>
-          <GoogleIcon /> <span>Entrar com conta Google</span>
+        <button 
+          onClick={handleLogin} 
+          className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1rem',
+            width: '100%',
+            padding: '1rem 1.5rem',
+            backgroundColor: 'white',
+            border: '2px solid #e2e8f0',
+            borderRadius: '1rem',
+            fontWeight: 'bold',
+            color: '#334155',
+            cursor: 'pointer'
+          }}
+        >
+          <GoogleIcon /> 
+          <span>Entrar com conta Google</span>
         </button>
 
-        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>
+          Acesso Multi-usuário
+        </p>
       </div>
     </div>
   );
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
-      <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm z-20">
+      
+      {/* MENU MOBILE OVERLAY (Fundo escuro quando menu abre) */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* BARRA LATERAL RESPONSIVA */}
+      <aside 
+        className={`
+          fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out
+          md:relative md:translate-x-0 md:shadow-sm md:w-80
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}
+      >
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
           <div className="flex-1 overflow-hidden">
             <h1 className="text-sm font-bold truncate">{user.displayName}</h1>
             <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline">Sair</button>
           </div>
+          {/* Botão fechar no mobile */}
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600">
+            <X size={20} />
+          </button>
         </div>
 
         <div className="p-4 space-y-2 border-b border-slate-50">
@@ -422,7 +502,7 @@ export default function App() {
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
               isGenerating 
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                // CORRIGIDO: Sempre roxo/indigo, a menos que esteja gerando.
+                // CORRIGIDO: Sempre roxo, mesmo se o resumo já existe
                 : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
             }`}
           >
@@ -448,7 +528,7 @@ export default function App() {
           {files.map(file => (
             <div 
               key={file.id} 
-              onClick={() => { setActiveFileId(file.id); setCurrentView('files'); }} 
+              onClick={() => { setActiveFileId(file.id); setCurrentView('files'); setIsSidebarOpen(false); }} 
               className={`group flex flex-col p-3 rounded-xl cursor-pointer transition-all ${activeFileId === file.id && currentView === 'files' ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 shadow-sm' : 'hover:bg-slate-50 text-slate-600'}`}
             >
               <div className="flex items-center justify-between mb-1">
@@ -472,57 +552,69 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col bg-white overflow-hidden relative">
+        {/* BOTÃO DE MENU PARA MOBILE (Topo Esquerdo) */}
+        <div className="md:hidden absolute top-4 left-4 z-30">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 bg-white rounded-xl shadow-md border border-slate-100 text-slate-600"
+          >
+            <Menu size={24} />
+          </button>
+        </div>
+
         {error && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3">
-            <AlertCircle size={18} />
-            <span className="text-sm font-bold">{error}</span>
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-red-50 text-red-600 px-6 py-3 rounded-2xl shadow-xl border border-red-100 flex items-center gap-3 w-11/12 md:w-auto">
+            <AlertCircle size={18} className="shrink-0" />
+            <span className="text-xs md:text-sm font-bold">{error}</span>
             <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-full"><X size={14}/></button>
           </div>
         )}
 
         {currentView === 'ai-summary' ? (
-          <div className="flex-1 overflow-hidden p-6 md:p-12 bg-indigo-50/10 flex justify-center h-full">
-            <div className="max-w-4xl w-full bg-white rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden">
-              <div className="p-8 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
+          <div className="flex-1 overflow-hidden p-4 md:p-12 bg-indigo-50/10 flex justify-center h-full pt-16 md:pt-12">
+            <div className="max-w-4xl w-full bg-white rounded-[2rem] md:rounded-[3rem] shadow-xl border border-indigo-50 flex flex-col h-full overflow-hidden">
+              <div className="p-6 md:p-12 pb-6 border-b border-indigo-50 shrink-0">
                 <button onClick={() => setCurrentView('files')} className="mb-6 flex items-center gap-2 text-indigo-600 font-bold hover:-translate-x-1 transition-transform group text-sm">
                   <ChevronLeft size={18} className="group-hover:scale-110" /> Voltar para Arquivos
                 </button>
-                <div className="flex justify-between items-start flex-wrap gap-4">
-                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={42} /></div>
+                <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                  <div className="flex items-center gap-4 md:gap-6">
+                    <div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0">
+                      <Brain size={24} className="md:w-10 md:h-10" />
+                    </div>
                     <div>
-                      <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2>
-                      <p className="text-slate-400 font-medium italic mt-1 text-sm md:text-base">Análise inteligente automatizada</p>
+                      <h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2>
+                      <p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    {/* BOTÃO OUVIR - SÓ APARECE SE TIVER AUDIO */}
-                    {audioUrl && (
+                  <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    {/* BOTÃO OUVIR */}
+                    {aiSummary && (
                       <button 
                         onClick={() => toggleAudio()}
                         disabled={isGeneratingAudio}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                        className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
                           isPlaying 
                             ? 'bg-red-50 text-red-600 hover:bg-red-100' 
                             : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
                         }`}
                       >
-                        {isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir Resumo</>}
+                        {isGeneratingAudio ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}
                       </button>
                     )}
-                    {/* BOTÃO GERAR ÁUDIO - SÓ APARECE SE NÃO TIVER AUDIO E TIVER RESUMO */}
+                    {/* BOTÃO GERAR ÁUDIO */}
                     {!audioUrl && aiSummary && (
                       <button 
                         onClick={() => generateAudio(aiSummary)}
                         disabled={isGeneratingAudio}
-                        className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
                       >
-                        {isGeneratingAudio ? "Criando Áudio..." : "Criar Áudio"}
+                        {isGeneratingAudio ? "Criando..." : "Criar Áudio"}
                       </button>
                     )}
                     <button 
                       onClick={() => generateAISummary(files, true)}
-                      className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                      className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
                     >
                       <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
                       Regenerar
@@ -531,11 +623,11 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 md:p-12 pt-6 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-6 md:p-12 pt-6 custom-scrollbar">
                 {isGenerating ? (
                   <div className="space-y-8 py-4"><div className="h-4 bg-slate-100 rounded-full w-3/4 animate-pulse"></div><div className="h-4 bg-slate-100 rounded-full w-full animate-pulse"></div><div className="h-64 bg-slate-50 rounded-[2.5rem] animate-pulse"></div></div>
                 ) : aiSummary ? (
-                  <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-8 md:p-10 rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words">{aiSummary}</div>
+                  <div className="prose prose-indigo max-w-none text-slate-700 leading-relaxed font-sans bg-indigo-50/20 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-indigo-100/50 whitespace-pre-wrap shadow-inner break-words text-sm md:text-base">{aiSummary}</div>
                 ) : (
                   <div className="text-center py-32"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Sparkles size={40} /></div><p className="text-slate-400 font-medium">Nada para mostrar hoje ainda.</p></div>
                 )}
@@ -545,52 +637,72 @@ export default function App() {
           </div>
         ) : activeFile ? (
           <>
-            <header className="h-20 border-b border-slate-100 px-8 flex items-center justify-between bg-white/80 backdrop-blur-md shadow-sm z-10 shrink-0">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-3"><h2 className="text-xl font-bold text-slate-800">{activeFile.name}</h2><span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span></div>
-                <div className="flex items-center gap-3 mt-1.5"><div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}% concluído</span></div>
+            <header className="h-20 border-b border-slate-100 px-4 md:px-8 flex items-center justify-between bg-white/80 backdrop-blur-md shadow-sm z-10 shrink-0 pl-16 md:pl-8">
+              <div className="flex flex-col overflow-hidden mr-2">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg md:text-xl font-bold text-slate-800 truncate">{activeFile.name}</h2>
+                  <span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span>
+                </div>
+                <div className="flex items-center gap-3 mt-1.5">
+                   <div className="w-16 md:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div>
+                   <span className="text-[8px] md:text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}%</span>
+                </div>
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={18}/> Salvar</> : <><Edit3 size={18}/> Editar Conteúdo</>}</button>
+              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                {isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}
+              </button>
             </header>
-            <div className="flex-1 flex overflow-hidden h-full">
-              <div className="flex-1 p-8 overflow-hidden flex flex-col bg-white">
-                <div className="mb-4 flex justify-between items-center shrink-0"><h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Área de Escrita</h3>{isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}</div>
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden h-full">
+              {/* ÁREA DE TEXTO */}
+              <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeFile.tasks?.length > 0 ? 'h-1/2 md:h-full' : 'h-full'}`}>
+                <div className="mb-4 flex justify-between items-center shrink-0">
+                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Editor</h3>
+                   {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">EDITANDO</span>}
+                </div>
                 {isEditing ? (
-                  <textarea className="flex-1 p-8 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => { isTypingRef.current = true; }} onBlur={() => { isTypingRef.current = false; }} onChange={(e) => updateFileContent(e.target.value)} placeholder="Comece a escrever..." />
+                  <textarea className="flex-1 p-4 md:p-8 border border-slate-100 rounded-[2rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => { isTypingRef.current = true; }} onBlur={() => { isTypingRef.current = false; }} onChange={(e) => updateFileContent(e.target.value)} placeholder="Comece a escrever..." />
                 ) : (
-                  <div className="flex-1 p-10 bg-slate-50/30 rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar border-dashed">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>
+                  <div className="flex-1 p-6 md:p-10 bg-slate-50/30 rounded-[2rem] md:rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar border-dashed">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>
                 )}
               </div>
-              <div className="w-96 bg-slate-50/50 p-8 flex flex-col overflow-hidden border-l border-slate-100">
-                <div className="mb-8 shrink-0"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Minhas Tarefas</h3><div className="flex gap-2"><input type="text" className="flex-1 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} /><button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={24} /></button></div></div>
-                <div className="space-y-2.5 overflow-y-auto custom-scrollbar flex-1 pr-2">
+              
+              {/* ÁREA DE TAREFAS (Abaixo no mobile, ao lado no desktop) */}
+              <div className="w-full md:w-96 bg-slate-50/50 p-6 md:p-8 flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-100 h-1/2 md:h-full">
+                <div className="mb-4 md:mb-8 shrink-0">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Tarefas</h3>
+                  <div className="flex gap-2">
+                    <input type="text" className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-300 transition-all shadow-sm" placeholder="Nova tarefa..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTask()} />
+                    <button onClick={addTask} className="p-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"><Plus size={20} /></button>
+                  </div>
+                </div>
+                <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1 pr-2">
                   {activeFile.tasks?.map(task => (
-                    <div key={task.id} className={`group flex items-center gap-3 p-4 rounded-2xl border transition-all ${task.completed ? 'bg-emerald-50/40 border-emerald-100 text-slate-400' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:border-indigo-200'}`}>
-                      <button onClick={() => toggleTask(task.id)} className="shrink-0 transition-transform active:scale-75">{task.completed ? <CheckCircle2 size={24} className="text-emerald-500" /> : <Square size={24} className="text-slate-200 group-hover:text-indigo-400" />}</button>
+                    <div key={task.id} className={`group flex items-center gap-3 p-3 md:p-4 rounded-2xl border transition-all ${task.completed ? 'bg-emerald-50/40 border-emerald-100 text-slate-400' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:border-indigo-200'}`}>
+                      <button onClick={() => toggleTask(task.id)} className="shrink-0 transition-transform active:scale-75">{task.completed ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Square size={20} className="text-slate-200 group-hover:text-indigo-400" />}</button>
                       <span className={`text-sm flex-1 leading-snug font-medium ${task.completed ? 'line-through opacity-60' : ''}`}>{task.text}</span>
-                      <button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"><X size={16} /></button>
+                      <button onClick={() => removeTask(task.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"><X size={14} /></button>
                     </div>
                   ))}
-                  {(!activeFile.tasks || activeFile.tasks.length === 0) && <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas vinculadas.</div>}
+                  {(!activeFile.tasks || activeFile.tasks.length === 0) && <div className="text-center py-10 text-slate-300 italic text-xs">Sem tarefas.</div>}
                 </div>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center bg-slate-50/20 h-full w-full overflow-hidden">
-            <div className="w-32 h-32 bg-white rounded-[3rem] flex items-center justify-center mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100 group hover:rotate-0 transition-all duration-500"><Cloud size={64} className="text-indigo-500 group-hover:scale-110 transition-transform" /></div>
-            <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">Olá, {user.displayName?.split(' ')[0]}!</h2>
-            <p className="max-w-md text-slate-500 leading-relaxed text-lg font-medium text-center">Seus documentos estão seguros. No seu primeiro acesso do dia, a IA gera automaticamente seu resumo matinal.</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 md:p-12 text-center bg-slate-50/20 h-full w-full overflow-hidden pt-16 md:pt-0">
+            <div className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-[2rem] md:rounded-[3rem] flex items-center justify-center mb-6 md:mb-10 shadow-xl shadow-slate-200/50 rotate-3 border border-slate-100 group hover:rotate-0 transition-all duration-500"><Cloud size={48} className="text-indigo-500 group-hover:scale-110 transition-transform md:w-16 md:h-16" /></div>
+            <h2 className="text-2xl md:text-4xl font-black text-slate-800 mb-2 md:mb-4 tracking-tight">Olá, {user.displayName?.split(' ')[0]}!</h2>
+            <p className="max-w-xs md:max-w-md text-slate-500 leading-relaxed text-sm md:text-lg font-medium text-center">Seus documentos estão seguros. Escolha um arquivo no menu ou crie um novo.</p>
           </div>
         )}
       </main>
 
       {showNewFileDialog && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[3rem] p-12 w-full max-w-md shadow-2xl border border-slate-100">
-            <h3 className="text-3xl font-black text-slate-800 mb-8 text-center tracking-tighter">Criar Novo TXT</h3>
-            <input autoFocus type="text" className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-10 focus:ring-4 focus:ring-indigo-100 transition-all shadow-inner" placeholder="Ex: Projeto_Viagem.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
-            <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar Arquivo</button></div>
+          <div className="bg-white rounded-[3rem] p-8 md:p-12 w-full max-w-md shadow-2xl border border-slate-100">
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-6 md:mb-8 text-center tracking-tighter">Criar Novo TXT</h3>
+            <input autoFocus type="text" className="w-full px-6 py-4 md:py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-8 focus:ring-4 focus:ring-indigo-100 transition-all shadow-inner" placeholder="Ex: Projeto_Viagem.txt" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
+            <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95">Criar</button></div>
           </div>
         </div>
       )}

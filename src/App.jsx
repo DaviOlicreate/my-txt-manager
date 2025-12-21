@@ -36,7 +36,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -84,6 +84,7 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
 };
 
 // --- UTILITÁRIOS DE AGENDA (.ICS - CORRIGIDO PARA HORA LOCAL) ---
+// Formata a data para ICS sem o 'Z' no final para usar "Floating Time" (horário local do dispositivo)
 const formatICSDateLocal = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -104,6 +105,7 @@ const generateCalendarFile = (events) => {
   events.forEach(evt => {
     icsContent += "BEGIN:VEVENT\n";
     icsContent += `SUMMARY:${evt.summary}\n`;
+    // Usa formatação local para evitar problemas de fuso
     icsContent += `DTSTART:${formatICSDateLocal(evt.dtStart)}\n`;
     icsContent += `DTEND:${formatICSDateLocal(evt.dtEnd)}\n`;
     icsContent += `DESCRIPTION:Gerado por TXT Manager\n`;
@@ -288,66 +290,47 @@ export default function App() {
   const handleExportToCalendar = async () => {
     if (!apiKey) { setError("Erro: Chave de API necessária."); return; }
     
-    // Filtra tarefas não completadas E que ainda não foram exportadas
     const tasksToProcess = [];
-    files.forEach(f => {
-      if (f.tasks) {
-        f.tasks.forEach(t => {
-          if (!t.completed && !t.exportedToCalendar) {
-            tasksToProcess.push({
-              text: t.text,
-              id: t.id,
-              fileId: f.id
-            });
-          }
-        });
-      }
-    });
-
-    if (tasksToProcess.length === 0) {
-      setError("Todas as tarefas pendentes já foram exportadas ou não há novas tarefas.");
-      return;
-    }
+    files.forEach(f => f.tasks?.forEach(t => !t.completed && tasksToProcess.push(t.text)));
+    if (tasksToProcess.length === 0) { setError("Nenhuma tarefa pendente para exportar."); return; }
 
     setIsExportingCalendar(true);
     setError(null);
     setSuccessMsg(null);
 
-    const nowLocal = new Date().toString(); 
+    // Prompt ajustado para corrigir fuso horário
+    // Passamos a data completa do sistema local para a IA ter referência exata do fuso.
+    const nowLocal = new Date().toString(); // Ex: "Sun Dec 21 2025 03:25:00 GMT-0300 (Brasilia Standard Time)"
     
     const systemPrompt = `Você é um assistente de agendamento.
     Data/Hora atual do usuário (com fuso): ${nowLocal}.
     
     Analise as tarefas. Identifique a intenção de data e hora.
     Regras de Fuso Horário (CRÍTICO):
-    1. Retorne as datas no formato ISO 8601 COM O OFFSET DE FUSO CORRETO baseado na data atual fornecida.
-    2. NÃO converta para UTC (Z) se não for o fuso local.
+    1. Retorne as datas no formato ISO 8601 COM O OFFSET DE FUSO CORRETO baseado na data atual fornecida acima (ex: -03:00 para Brasil).
+    2. NÃO converta para UTC (Z). Mantenha o horário local da intenção do usuário.
+    3. Exemplo: Se o usuário diz "às 15h" e o fuso é -03:00, retorne "...T15:00:00-03:00".
 
     Regras de Negócio:
     - Se tiver duração (ex: '2h'), calcule o fim.
     - Se não tiver duração, assuma 1h.
     - Se for prazo ('até 10h'), início é agora e fim é o prazo.
     
-    Retorne JSON Array: { "taskId": "ID_DA_TAREFA", "summary": "Título", "dtStart": "ISO String com Offset", "dtEnd": "ISO String com Offset" }.
-    IMPORTANTE: Retorne o "taskId" fornecido na entrada para cada evento.
-    Ignore tarefas sem indicação temporal.`;
-
-    // Envia o ID junto com o texto para a IA
-    const queryText = tasksToProcess.map(t => `ID: ${t.id} | Tarefa: ${t.text}`).join('\n');
+    Retorne JSON Array: { "summary": "Título", "dtStart": "ISO String com Offset", "dtEnd": "ISO String com Offset" }.
+    Ignore tarefas sem tempo.`;
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: queryText }] }],
+          contents: [{ parts: [{ text: `Tarefas:\n${tasksToProcess.join('\n')}` }] }],
           systemInstruction: { parts: [{ text: systemPrompt }] },
           generationConfig: { responseMimeType: "application/json" }
         })
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
-      
       const events = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
 
       if (!events || events.length === 0) {
@@ -355,8 +338,6 @@ export default function App() {
       } else {
         if (googleAccessToken) {
           let addedCount = 0;
-          const successfulTaskIds = [];
-
           for (const evt of events) {
              try {
                await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
@@ -364,44 +345,18 @@ export default function App() {
                  headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
                  body: JSON.stringify({
                    summary: evt.summary,
-                   start: { dateTime: evt.dtStart },
+                   start: { dateTime: evt.dtStart }, // Envia com offset, Google entende
                    end: { dateTime: evt.dtEnd }
                  })
                });
                addedCount++;
-               if (evt.taskId) successfulTaskIds.push(evt.taskId);
              } catch (e) { console.error("Falha API Calendar:", e); }
           }
-          
-          // MARCAR TAREFAS COMO EXPORTADAS NO FIREBASE PARA EVITAR DUPLICIDADE
-          if (successfulTaskIds.length > 0) {
-            // Agrupar IDs por arquivo para minimizar escritas
-            const updatesByFile = {};
-            successfulTaskIds.forEach(taskId => {
-               const originalTask = tasksToProcess.find(t => t.id === taskId);
-               if (originalTask) {
-                 if (!updatesByFile[originalTask.fileId]) updatesByFile[originalTask.fileId] = [];
-                 updatesByFile[originalTask.fileId].push(taskId);
-               }
-            });
-
-            for (const [fileId, taskIds] of Object.entries(updatesByFile)) {
-               const fileDocRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fileId);
-               const fileSnapshot = await getDoc(fileDocRef);
-               if (fileSnapshot.exists()) {
-                 const fileData = fileSnapshot.data();
-                 const updatedTasks = fileData.tasks.map(t => 
-                   taskIds.includes(t.id) ? { ...t, exportedToCalendar: true } : t
-                 );
-                 await updateDoc(fileDocRef, { tasks: updatedTasks });
-               }
-            }
-          }
-
-          setSuccessMsg(`${addedCount} eventos novos adicionados à agenda!`);
+          setSuccessMsg(`${addedCount} eventos adicionados ao seu Google Calendar!`);
         } else {
+          // Fallback ICS com correção local
           generateCalendarFile(events);
-          setSuccessMsg("Arquivo de agenda gerado! (Modo offline)");
+          setSuccessMsg("Arquivo de agenda gerado! Importe-o no Google Calendar.");
         }
       }
     } catch (err) { setError(`Erro exportação: ${err.message}`); } 
@@ -420,7 +375,6 @@ export default function App() {
 
   const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); setGoogleAccessToken(null); });
 
-  // Funções CRUD (createNewFile, etc) mantidas iguais...
   const createNewFile = async (name) => {
     if (!user || !name) return;
     const id = crypto.randomUUID();

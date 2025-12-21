@@ -36,7 +36,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -401,15 +401,22 @@ export default function App() {
 
   if (!user) return (
     <div className="bg-slate-50 font-sans" style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'fixed', inset: 0, backgroundColor: '#f8fafc' }}>
-      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ borderRadius: '3rem', padding: '3rem', maxWidth: '28rem', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3"><FileText size={48} className="text-white" /></div>
+      <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in fade-in zoom-in duration-500" style={{ borderRadius: '3rem', padding: '3rem', maxWidth: '28rem', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', backgroundColor: 'white' }}>
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3" style={{ width: '6rem', height: '6rem', backgroundColor: '#4f46e5', borderRadius: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem auto' }}><FileText size={48} color="white" /></div>
         <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
-        <p className="text-slate-500 mb-10 text-lg">Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
-        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex gap-2"><AlertCircle size={14} className="mt-0.5" /><span>{error}</span></div>}
+        <p className="text-slate-500 mb-10 text-lg" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
+        
+        {error && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex gap-2" style={{ backgroundColor: '#fef2f2', color: '#dc2626', padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem', textAlign: 'left', border: '1px solid #fee2e2', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <AlertCircle size={14} /><span>{error}</span>
+          </div>
+        )}
+
         <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', cursor: 'pointer' }}>
           <GoogleIcon /> <span style={{ color: '#334155', fontWeight: 'bold', fontSize: '16px' }}>Entrar com conta Google</span>
         </button>
-        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Acesso Multi-usuário</p>
+
+        <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
       </div>
     </div>
   );

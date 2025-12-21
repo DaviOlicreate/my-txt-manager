@@ -30,7 +30,6 @@ const db = getFirestore(app);
 
 // CONFIGURAÇÃO DO PROVEDOR GOOGLE COM ESCOPO DE AGENDA
 const googleProvider = new GoogleAuthProvider();
-// Adiciona permissão para criar eventos na agenda do usuário
 googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
 
 const PROJECT_ID = 'my-txt-manager';
@@ -84,10 +83,21 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   return buffer;
 };
 
-// --- UTILITÁRIOS DE AGENDA (.ICS - FALLBACK) ---
-const formatICSDate = (isoString) => {
+// --- UTILITÁRIOS DE AGENDA (.ICS - CORRIGIDO PARA HORA LOCAL) ---
+// Formata a data para ICS sem o 'Z' no final para usar "Floating Time" (horário local do dispositivo)
+const formatICSDateLocal = (isoString) => {
   if (!isoString) return '';
-  return isoString.replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const date = new Date(isoString);
+  const pad = (n) => String(n).padStart(2, '0');
+  
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  
+  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
 };
 
 const generateCalendarFile = (events) => {
@@ -95,8 +105,9 @@ const generateCalendarFile = (events) => {
   events.forEach(evt => {
     icsContent += "BEGIN:VEVENT\n";
     icsContent += `SUMMARY:${evt.summary}\n`;
-    icsContent += `DTSTART:${formatICSDate(evt.dtStart)}\n`;
-    icsContent += `DTEND:${formatICSDate(evt.dtEnd)}\n`;
+    // Usa formatação local para evitar problemas de fuso
+    icsContent += `DTSTART:${formatICSDateLocal(evt.dtStart)}\n`;
+    icsContent += `DTEND:${formatICSDateLocal(evt.dtEnd)}\n`;
     icsContent += `DESCRIPTION:Gerado por TXT Manager\n`;
     icsContent += "END:VEVENT\n";
   });
@@ -105,7 +116,7 @@ const generateCalendarFile = (events) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', 'tarefas.ics');
+  link.setAttribute('download', 'tarefas_local.ics');
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -113,7 +124,7 @@ const generateCalendarFile = (events) => {
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState(null); // Token para API do Google
+  const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [files, setFiles] = useState([]);
   const [activeFileId, setActiveFileId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -124,7 +135,6 @@ export default function App() {
   const [successMsg, setSuccessMsg] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
-  // Estado para controle do Menu Mobile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState('editor');
   
@@ -140,7 +150,6 @@ export default function App() {
   const [localContent, setLocalContent] = useState('');
   const isTypingRef = useRef(false);
 
-  // Injetor de Estilo
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -277,7 +286,6 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
-  // --- NOVA FUNÇÃO DE EXPORTAÇÃO HÍBRIDA (API + ICS) ---
   const handleExportToCalendar = async () => {
     if (!apiKey) { setError("Erro: Chave de API necessária."); return; }
     
@@ -289,9 +297,25 @@ export default function App() {
     setError(null);
     setSuccessMsg(null);
 
-    const systemPrompt = `Você é um assistente de agendamento. Hoje é ${new Date().toISOString()}.
-    Analise as tarefas. Identifique data/hora. Se tiver duração, calcule fim. Se for prazo ("até 10h"), início é agora.
-    Retorne JSON Array: { "summary": "Título", "dtStart": "ISO String", "dtEnd": "ISO String" }.
+    // Prompt ajustado para corrigir fuso horário
+    // Passamos a data completa do sistema local para a IA ter referência exata do fuso.
+    const nowLocal = new Date().toString(); // Ex: "Sun Dec 21 2025 03:25:00 GMT-0300 (Brasilia Standard Time)"
+    
+    const systemPrompt = `Você é um assistente de agendamento.
+    Data/Hora atual do usuário (com fuso): ${nowLocal}.
+    
+    Analise as tarefas. Identifique a intenção de data e hora.
+    Regras de Fuso Horário (CRÍTICO):
+    1. Retorne as datas no formato ISO 8601 COM O OFFSET DE FUSO CORRETO baseado na data atual fornecida acima (ex: -03:00 para Brasil).
+    2. NÃO converta para UTC (Z). Mantenha o horário local da intenção do usuário.
+    3. Exemplo: Se o usuário diz "às 15h" e o fuso é -03:00, retorne "...T15:00:00-03:00".
+
+    Regras de Negócio:
+    - Se tiver duração (ex: '2h'), calcule o fim.
+    - Se não tiver duração, assuma 1h.
+    - Se for prazo ('até 10h'), início é agora e fim é o prazo.
+    
+    Retorne JSON Array: { "summary": "Título", "dtStart": "ISO String com Offset", "dtEnd": "ISO String com Offset" }.
     Ignore tarefas sem tempo.`;
 
     try {
@@ -311,7 +335,6 @@ export default function App() {
       if (!events || events.length === 0) {
         setError("Nenhuma tarefa com horário encontrada pela IA.");
       } else {
-        // TENTA USAR API DO GOOGLE PRIMEIRO
         if (googleAccessToken) {
           let addedCount = 0;
           for (const evt of events) {
@@ -321,7 +344,7 @@ export default function App() {
                  headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
                  body: JSON.stringify({
                    summary: evt.summary,
-                   start: { dateTime: evt.dtStart },
+                   start: { dateTime: evt.dtStart }, // Envia com offset, Google entende
                    end: { dateTime: evt.dtEnd }
                  })
                });
@@ -330,7 +353,7 @@ export default function App() {
           }
           setSuccessMsg(`${addedCount} eventos adicionados ao seu Google Calendar!`);
         } else {
-          // FALLBACK PARA ARQUIVO ICS
+          // Fallback ICS com correção local
           generateCalendarFile(events);
           setSuccessMsg("Arquivo de agenda gerado! Importe-o no Google Calendar.");
         }
@@ -343,7 +366,6 @@ export default function App() {
     try { 
       setError(null); 
       const result = await signInWithPopup(auth, googleProvider);
-      // CAPTURA O TOKEN DE ACESSO DO GOOGLE PARA A API DE CALENDÁRIO
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential) setGoogleAccessToken(credential.accessToken);
     } 
@@ -352,7 +374,6 @@ export default function App() {
 
   const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); setGoogleAccessToken(null); });
 
-  // Funções CRUD (createNewFile, etc) mantidas iguais...
   const createNewFile = async (name) => {
     if (!user || !name) return;
     const id = crypto.randomUUID();
@@ -456,6 +477,11 @@ export default function App() {
             </header>
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden h-full">
               <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeMobileTab === 'editor' ? 'flex' : 'hidden md:flex'}`}>
+                {/* INDICADOR DE EDITANDO REINSERIDO AQUI */}
+                <div className="mb-4 flex justify-between items-center shrink-0">
+                  <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Editor</h3>
+                  {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}
+                </div>
                 {isEditing ? <textarea className="flex-1 p-4 md:p-8 border border-slate-100 rounded-[2rem] bg-slate-50/50 font-mono text-sm leading-relaxed outline-none focus:ring-4 focus:ring-indigo-50 transition-all resize-none shadow-inner" value={localContent} onFocus={() => isTypingRef.current = true} onBlur={() => isTypingRef.current = false} onChange={(e) => updateFileContent(e.target.value)} /> : <div className="flex-1 p-6 md:p-10 bg-slate-50/30 rounded-[2rem] md:rounded-[3rem] overflow-y-auto border border-slate-100 whitespace-pre-wrap text-slate-700 font-mono text-sm leading-relaxed shadow-inner custom-scrollbar">{activeFile.content || <span className="text-slate-300 italic opacity-50">Documento vazio.</span>}</div>}
               </div>
               <div className={`w-full md:w-96 bg-slate-50/50 p-6 md:p-8 flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-100 ${activeMobileTab === 'tasks' ? 'flex' : 'hidden md:flex'}`}>
@@ -481,7 +507,7 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-[3rem] p-8 md:p-12 w-full max-w-md shadow-2xl border border-slate-100">
             <h3 className="text-2xl font-black text-slate-800 mb-6 text-center">Criar Novo TXT</h3>
-            <input autoFocus type="text" className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-8 focus:ring-4 focus:ring-indigo-100" placeholder="Nome..." value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
+            <input autoFocus type="text" className="w-full px-6 py-4 md:py-5 bg-slate-50 border border-slate-200 rounded-3xl text-lg outline-none mb-8 focus:ring-4 focus:ring-indigo-100" placeholder="Nome..." value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNewFile(newFileName)} />
             <div className="flex gap-4"><button onClick={() => setShowNewFileDialog(false)} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl">Cancelar</button><button onClick={() => createNewFile(newFileName)} className="flex-1 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl active:scale-95">Criar</button></div>
           </div>
         </div>

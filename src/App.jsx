@@ -437,7 +437,9 @@ export default function App() {
             onClick={handleSidebarSummaryClick}
             disabled={files.length === 0 || isGenerating}
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
-              isGenerating ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
+              isGenerating 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]'
             }`}
           >
             {isGenerating ? <Loader2 className="animate-spin" size={18} /> : (aiSummary ? <BookOpen size={18} /> : <Sparkles size={18} />)}
@@ -476,8 +478,14 @@ export default function App() {
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                   <div className="flex items-center gap-4 md:gap-6"><div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100 transform -rotate-3 shrink-0"><Brain size={24} className="md:w-10 md:h-10" /></div><div><h2 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p></div></div>
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    {aiSummary && (<button onClick={() => toggleAudio()} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>{isGeneratingAudio ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>)}
-                    {!audioUrl && aiSummary && (<button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>)}
+                    {/* BOTÃO OUVIR: Só aparece se audioUrl existir */}
+                    {audioUrl && (
+                      <button onClick={() => toggleAudio()} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>{isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>
+                    )}
+                    {/* BOTÃO CRIAR ÁUDIO: Só aparece se tiver resumo e NÃO tiver audio ainda */}
+                    {!audioUrl && aiSummary && (
+                      <button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>
+                    )}
                     <button onClick={() => generateAISummary(files, true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"><RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} /> Regenerar</button>
                   </div>
                 </div>
@@ -498,10 +506,8 @@ export default function App() {
               <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
             </header>
             
-            {/* LAYOUT HÍBRIDO: TABS NO MOBILE, LADO A LADO NO DESKTOP */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden h-full">
               
-              {/* ÁREA DE TEXTO: Visível se Tab='editor' ou se for Desktop */}
               <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeMobileTab === 'editor' ? 'flex' : 'hidden md:flex'}`}>
                 <div className="mb-4 flex justify-between items-center shrink-0">
                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Editor</h3>
@@ -514,7 +520,6 @@ export default function App() {
                 )}
               </div>
               
-              {/* ÁREA DE TAREFAS: Visível se Tab='tasks' ou se for Desktop */}
               <div className={`w-full md:w-96 bg-slate-50/50 p-6 md:p-8 flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-100 ${activeMobileTab === 'tasks' ? 'flex' : 'hidden md:flex'}`}>
                 <div className="mb-4 md:mb-8 shrink-0">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Tarefas</h3>
@@ -536,24 +541,9 @@ export default function App() {
               </div>
 
               {/* MENU DE ABAS FLUTUANTE (SÓ NO MOBILE) */}
-              <div className="md:hidden absolute bottom-6 left-1/2 -translate-x-1/2 bg-white shadow-2xl border border-slate-200 rounded-full p-1.5 flex items-center gap-1 z-20">
-                <button 
-                  onClick={() => setActiveMobileTab('editor')}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'editor' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-                >
-                  <PenTool size={16} /> Editor
-                </button>
-                <button 
-                  onClick={() => setActiveMobileTab('tasks')}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-                >
-                  <ListTodo size={16} /> Tarefas
-                  {activeFile.tasks?.filter(t => !t.completed).length > 0 && (
-                    <span className="bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full ml-1">
-                      {activeFile.tasks.filter(t => !t.completed).length}
-                    </span>
-                  )}
-                </button>
+              <div className="md:hidden fixed bottom-8 left-1/2 -translate-x-1/2 bg-white shadow-2xl border border-slate-200 rounded-full p-1.5 flex items-center gap-1 z-50">
+                <button onClick={() => setActiveMobileTab('editor')} className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'editor' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}><PenTool size={16} /> Editor</button>
+                <button onClick={() => setActiveMobileTab('tasks')} className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold transition-all ${activeMobileTab === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}><ListTodo size={16} /> Tarefas {activeFile.tasks?.filter(t => !t.completed).length > 0 && (<span className="bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full ml-1">{activeFile.tasks.filter(t => !t.completed).length}</span>)}</button>
               </div>
 
             </div>

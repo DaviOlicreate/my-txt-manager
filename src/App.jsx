@@ -362,58 +362,96 @@ export default function App() {
     const tasksToExport = [];
     const now = new Date();
 
+    // Helper para interpretar dias da semana e datas relativas
+    const getTargetDate = (text) => {
+      const lower = text.toLowerCase();
+      const d = new Date(); // Começa hoje
+      
+      if (lower.includes('amanhã') || lower.includes('amanha')) {
+        d.setDate(d.getDate() + 1);
+        return d;
+      }
+      
+      const weekMap = {
+        'domingo': 0, 'segunda': 1, 'terça': 2, 'terca': 2, 
+        'quarta': 3, 'quinta': 4, 'sexta': 5, 'sábado': 6, 'sabado': 6
+      };
+      
+      for (const [dayName, dayIndex] of Object.entries(weekMap)) {
+        if (lower.includes(dayName)) {
+          const currentDay = d.getDay();
+          let diff = dayIndex - currentDay;
+          if (diff <= 0) diff += 7; // Próximo dia da semana
+          d.setDate(d.getDate() + diff);
+          return d;
+        }
+      }
+      return d; // Retorna hoje se não achar nada
+    };
+
+    // Helper para extrair hora e retornar data completa
+    const extractTime = (str, dateBase) => {
+      const match = str.match(/(\d{1,2})(?:[:h](\d{2}))?/);
+      if (!match) return null;
+      const newDate = new Date(dateBase);
+      newDate.setHours(parseInt(match[1]), parseInt(match[2] || '0'), 0, 0);
+      return newDate;
+    };
+
     files.forEach(file => {
       if (file.tasks && file.tasks.length > 0) {
         file.tasks.forEach(task => {
-          if (task.completed) return; // Opcional: não exportar completadas
+          if (task.completed) return;
 
           const text = task.text.toLowerCase();
+          const targetDate = getTargetDate(text); // Analisa "amanhã", "segunda", etc.
           let start = null;
           let end = null;
-          let created = task.createdAt ? new Date(task.createdAt) : new Date(); // Fallback para agora se não tiver createdAt
-
-          // 1. Detectar "até às HH:mm" (Fim definido, Início = Criação)
-          const matchAte = text.match(/até (?:[àa]s )?(\d{1,2})(?:[:h](\d{2}))?/);
           
-          // 2. Detectar "às HH:mm" (Início definido, Fim = Início + Duração ou 1h)
-          const matchAs = text.match(/(?:^|\s)às (\d{1,2})(?:[:h](\d{2}))?/);
+          // Regex Patterns aprimorados
           
-          // 3. Detectar duração "duração de Xh"
-          const matchDuracao = text.match(/duração (?:de )?(\d+)\s*(h|m|min)/);
+          // 1. Intervalo Explicito: "15h até 16h", "15:00 as 16:00"
+          // Captura duas horas separadas por "até", "ate", "as", "às" ou "-"
+          const intervalMatch = text.match(/(\d{1,2}(?:[:h]\d{2})?)\s*(?:até|ate|-)\s*(?:às|as)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          
+          // 2. Horário de Início: "às 14h", "as 14:30" (ignora se for parte de "até às")
+          const timeMatch = text.match(/(?:^|\s)(?:às|as|inicio)\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          
+          // 3. Duração: "duração de 2h", "por 30m"
+          const durationMatch = text.match(/dura(?:ção|cao)\s*(?:de)?\s*(\d+)\s*(h|m|min)/);
+          
+          // 4. Prazo final (sem inicio explícito): "entregar até 10h", "até as 11:00"
+          // Pega apenas se não tiver casado com o intervalo antes
+          const deadlineMatch = text.match(/(?:^|\s)(?:até|ate|para)\s*(?:às|as)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
 
-          if (matchAte) {
-            // Caso: Prazo final (Período: Criação -> Hora limite)
-            start = created;
-            end = new Date();
-            end.setHours(parseInt(matchAte[1]), parseInt(matchAte[2] || '0'), 0, 0);
-            
-            // Se o horário final já passou hoje, assume amanhã? 
-            // Para simplificar, assume o dia atual. Se start > end, ajusta end para amanhã.
-            if (start > end) end.setDate(end.getDate() + 1);
-
-          } else if (matchAs) {
-            // Caso: Evento agendado (Início -> Fim)
-            start = new Date();
-            start.setHours(parseInt(matchAs[1]), parseInt(matchAs[2] || '0'), 0, 0);
-            
-            // Duração padrão 1h ou detectada
-            let durationMinutes = 60;
-            if (matchDuracao) {
-              const value = parseInt(matchDuracao[1]);
-              const unit = matchDuracao[2];
-              if (unit === 'h') durationMinutes = value * 60;
-              else durationMinutes = value;
+          if (intervalMatch) {
+            start = extractTime(intervalMatch[1], targetDate);
+            end = extractTime(intervalMatch[2], targetDate);
+          } else if (timeMatch) {
+            start = extractTime(timeMatch[1], targetDate);
+            // Calcula fim baseado na duração ou padrão 1h
+            if (durationMatch) {
+              const val = parseInt(durationMatch[1]);
+              const unit = durationMatch[2]; // h, m, min
+              const durationMs = (unit === 'h') ? val * 60 * 60 * 1000 : val * 60 * 1000;
+              end = new Date(start.getTime() + durationMs);
+            } else {
+              end = new Date(start.getTime() + 60 * 60 * 1000); // 1h default
             }
-            
-            end = new Date(start.getTime() + durationMinutes * 60000);
+          } else if (deadlineMatch) {
+            // Caso "Até tal hora"
+            end = extractTime(deadlineMatch[1], targetDate);
+            // Início é a criação da tarefa
+            const created = task.createdAt ? new Date(task.createdAt) : new Date();
+            start = created;
           }
 
-          if (start && end) {
-            tasksToExport.push({
-              text: task.text,
-              start: start,
-              end: end
-            });
+          if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+             tasksToExport.push({
+               text: task.text,
+               start: start,
+               end: end
+             });
           }
         });
       }
@@ -421,8 +459,6 @@ export default function App() {
 
     if (tasksToExport.length > 0) {
       generateCalendarFile(tasksToExport);
-      // Feedback visual opcional
-      // alert(`${tasksToExport.length} tarefas exportadas para a agenda!`);
     } else {
       setError("Nenhuma tarefa com horário identificado encontrada (ex: 'às 14h', 'até às 10h').");
       setTimeout(() => setError(null), 4000);

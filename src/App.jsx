@@ -32,7 +32,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -362,10 +362,10 @@ export default function App() {
     const tasksToExport = [];
     const now = new Date();
 
-    // Helper para interpretar dias da semana e datas relativas
+    // Helper: Interpretar data (hoje, amanhã, segunda, etc.)
     const getTargetDate = (text) => {
       const lower = text.toLowerCase();
-      const d = new Date(); // Começa hoje
+      const d = new Date();
       
       if (lower.includes('amanhã') || lower.includes('amanha')) {
         d.setDate(d.getDate() + 1);
@@ -386,11 +386,12 @@ export default function App() {
           return d;
         }
       }
-      return d; // Retorna hoje se não achar nada
+      return d; // Padrão: hoje, a menos que especificado
     };
 
-    // Helper para extrair hora e retornar data completa
+    // Helper: Extrair hora e criar objeto Date
     const extractTime = (str, dateBase) => {
+      // Aceita 14h, 14:30, 14
       const match = str.match(/(\d{1,2})(?:[:h](\d{2}))?/);
       if (!match) return null;
       const newDate = new Date(dateBase);
@@ -404,46 +405,51 @@ export default function App() {
           if (task.completed) return;
 
           const text = task.text.toLowerCase();
-          const targetDate = getTargetDate(text); // Analisa "amanhã", "segunda", etc.
+          // Detectar dia específico mencionado na tarefa
+          const targetDate = getTargetDate(text); 
           let start = null;
           let end = null;
           
-          // Regex Patterns aprimorados
+          // Regex 1: Intervalo explícito "15h até 16h", "das 14:00 às 15:30"
+          // Captura duas horas
+          const intervalMatch = text.match(/(?:das?|às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)\s*(?:até|ate|-|às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)/);
           
-          // 1. Intervalo Explicito: "15h até 16h", "15:00 as 16:00"
-          // Captura duas horas separadas por "até", "ate", "as", "às" ou "-"
-          const intervalMatch = text.match(/(\d{1,2}(?:[:h]\d{2})?)\s*(?:até|ate|-)\s*(?:às|as)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          // Regex 2: Início definido "às 14h" ou "14:30" (ignora se fizer parte de um intervalo "até")
+          const timeMatch = text.match(/(?:^|\s)(?:às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)/);
           
-          // 2. Horário de Início: "às 14h", "as 14:30" (ignora se for parte de "até às")
-          const timeMatch = text.match(/(?:^|\s)(?:às|as|inicio)\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          // Regex 3: Duração explícita "duração de 2h", "por 30m"
+          const durationMatch = text.match(/dura(?:ção|cao)\s*(?:de)?\s*(\d+)\s*(h|m|min|horas?|minutos?)/);
           
-          // 3. Duração: "duração de 2h", "por 30m"
-          const durationMatch = text.match(/dura(?:ção|cao)\s*(?:de)?\s*(\d+)\s*(h|m|min)/);
-          
-          // 4. Prazo final (sem inicio explícito): "entregar até 10h", "até as 11:00"
-          // Pega apenas se não tiver casado com o intervalo antes
-          const deadlineMatch = text.match(/(?:^|\s)(?:até|ate|para)\s*(?:às|as)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          // Regex 4: Prazo final "até às 10h", "entregar até 11:00" (sem horário de início explícito)
+          const deadlineMatch = text.match(/(?:^|\s)(?:até|ate|para)\s*(?:às?|as?)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
 
           if (intervalMatch) {
+            // Caso: "15h até 16h"
             start = extractTime(intervalMatch[1], targetDate);
             end = extractTime(intervalMatch[2], targetDate);
-          } else if (timeMatch) {
+          } else if (timeMatch && !intervalMatch) {
+            // Caso: "às 14h" (pode ter duração)
             start = extractTime(timeMatch[1], targetDate);
-            // Calcula fim baseado na duração ou padrão 1h
+            
+            // Calcula fim: ou pela duração ou padrão 1h
             if (durationMatch) {
               const val = parseInt(durationMatch[1]);
               const unit = durationMatch[2]; // h, m, min
-              const durationMs = (unit === 'h') ? val * 60 * 60 * 1000 : val * 60 * 1000;
+              const durationMs = (unit.startsWith('h')) ? val * 3600000 : val * 60000;
               end = new Date(start.getTime() + durationMs);
             } else {
-              end = new Date(start.getTime() + 60 * 60 * 1000); // 1h default
+              end = new Date(start.getTime() + 3600000); // 1h default
             }
           } else if (deadlineMatch) {
-            // Caso "Até tal hora"
+            // Caso: "até às 10h" (Prazo)
             end = extractTime(deadlineMatch[1], targetDate);
-            // Início é a criação da tarefa
+            // Início é o momento da criação da tarefa (ou agora, se não tiver createdAt)
             const created = task.createdAt ? new Date(task.createdAt) : new Date();
+            // Se a criação foi antes de hoje, usa start como "agora" ou início do dia alvo?
+            // Regra do usuário: "período vai ser do horário que foi criado a tarefa até a 10"
             start = created;
+            
+            // Ajuste: Se o prazo é amanhã, o evento atravessa a meia-noite (multi-dia)
           }
 
           if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
@@ -460,7 +466,7 @@ export default function App() {
     if (tasksToExport.length > 0) {
       generateCalendarFile(tasksToExport);
     } else {
-      setError("Nenhuma tarefa com horário identificado encontrada (ex: 'às 14h', 'até às 10h').");
+      setError("Nenhuma tarefa com horário identificado encontrada (ex: 'às 14h', 'até às 10h', 'amanhã às 15h').");
       setTimeout(() => setError(null), 4000);
     }
     

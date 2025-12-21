@@ -32,7 +32,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -80,21 +80,19 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
 };
 
 // --- UTILITÁRIOS DE AGENDA (.ICS) ---
-const formatICSDate = (isoString) => {
-  if (!isoString) return '';
-  // Remove caracteres não alfanuméricos e formata para UTC
-  return isoString.replace(/[-:]/g, '').split('.')[0] + 'Z';
+const formatICSDate = (date) => {
+  return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 };
 
-const generateCalendarFile = (events) => {
+const generateCalendarFile = (tasks) => {
   let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//TXT Manager//PT\n";
   
-  events.forEach(evt => {
+  tasks.forEach(task => {
     icsContent += "BEGIN:VEVENT\n";
-    icsContent += `SUMMARY:${evt.summary}\n`;
-    icsContent += `DTSTART:${formatICSDate(evt.dtStart)}\n`;
-    icsContent += `DTEND:${formatICSDate(evt.dtEnd)}\n`;
-    icsContent += `DESCRIPTION:Tarefa gerada via TXT Manager AI\n`;
+    icsContent += `SUMMARY:${task.text}\n`;
+    icsContent += `DTSTART:${formatICSDate(task.start)}\n`;
+    icsContent += `DTEND:${formatICSDate(task.end)}\n`;
+    icsContent += `DESCRIPTION:Gerado pelo TXT Manager\n`;
     icsContent += "END:VEVENT\n";
   });
   
@@ -104,7 +102,7 @@ const generateCalendarFile = (events) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', 'minhas_tarefas.ics');
+  link.setAttribute('download', 'tarefas_agenda.ics');
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -130,7 +128,6 @@ export default function App() {
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-  const [isExportingCalendar, setIsExportingCalendar] = useState(false); // Novo estado
   const [audioUrl, setAudioUrl] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(null);
@@ -361,73 +358,119 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
-  // --- NOVA FUNÇÃO DE EXPORTAÇÃO COM IA (GEMINI) ---
-  const handleExportToCalendar = async () => {
-    if (!apiKey) {
-      setError("Erro: Chave de API necessária para exportação inteligente.");
-      return;
-    }
+  const handleExportToCalendar = () => {
+    const tasksToExport = [];
+    const now = new Date();
 
-    const tasksToProcess = [];
+    // Helper: Interpretar data (hoje, amanhã, segunda, etc.)
+    const getTargetDate = (text) => {
+      const lower = text.toLowerCase();
+      const d = new Date();
+      
+      if (lower.includes('amanhã') || lower.includes('amanha')) {
+        d.setDate(d.getDate() + 1);
+        return d;
+      }
+      
+      const weekMap = {
+        'domingo': 0, 'segunda': 1, 'terça': 2, 'terca': 2, 
+        'quarta': 3, 'quinta': 4, 'sexta': 5, 'sábado': 6, 'sabado': 6
+      };
+      
+      for (const [dayName, dayIndex] of Object.entries(weekMap)) {
+        if (lower.includes(dayName)) {
+          const currentDay = d.getDay();
+          let diff = dayIndex - currentDay;
+          if (diff <= 0) diff += 7; // Próximo dia da semana
+          d.setDate(d.getDate() + diff);
+          return d;
+        }
+      }
+      return d; // Padrão: hoje, a menos que especificado
+    };
+
+    // Helper: Extrair hora e criar objeto Date
+    const extractTime = (str, dateBase) => {
+      // Aceita 14h, 14:30, 14
+      const match = str.match(/(\d{1,2})(?:[:h](\d{2}))?/);
+      if (!match) return null;
+      const newDate = new Date(dateBase);
+      newDate.setHours(parseInt(match[1]), parseInt(match[2] || '0'), 0, 0);
+      return newDate;
+    };
+
     files.forEach(file => {
-      if (file.tasks) {
-        file.tasks.forEach(t => {
-          if (!t.completed) tasksToProcess.push(t.text);
+      if (file.tasks && file.tasks.length > 0) {
+        file.tasks.forEach(task => {
+          if (task.completed) return;
+
+          const text = task.text.toLowerCase();
+          // Detectar dia específico mencionado na tarefa
+          const targetDate = getTargetDate(text); 
+          let start = null;
+          let end = null;
+          
+          // Regex 1: Intervalo explícito "15h até 16h", "das 14:00 às 15:30"
+          // Captura duas horas
+          const intervalMatch = text.match(/(?:das?|às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)\s*(?:até|ate|-|às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          
+          // Regex 2: Início definido "às 14h" ou "14:30" (ignora se fizer parte de um intervalo "até")
+          const timeMatch = text.match(/(?:^|\s)(?:às?|as?)\s*(\d{1,2}(?:[:h]\d{2})?)/);
+          
+          // Regex 3: Duração explícita "duração de 2h", "por 30m"
+          const durationMatch = text.match(/dura(?:ção|cao)\s*(?:de)?\s*(\d+)\s*(h|m|min|horas?|minutos?)/);
+          
+          // Regex 4: Prazo final "até às 10h", "entregar até 11:00" (sem horário de início explícito)
+          const deadlineMatch = text.match(/(?:^|\s)(?:até|ate|para)\s*(?:às?|as?)?\s*(\d{1,2}(?:[:h]\d{2})?)/);
+
+          if (intervalMatch) {
+            // Caso: "15h até 16h"
+            start = extractTime(intervalMatch[1], targetDate);
+            end = extractTime(intervalMatch[2], targetDate);
+          } else if (timeMatch && !intervalMatch) {
+            // Caso: "às 14h" (pode ter duração)
+            start = extractTime(timeMatch[1], targetDate);
+            
+            // Calcula fim: ou pela duração ou padrão 1h
+            if (durationMatch) {
+              const val = parseInt(durationMatch[1]);
+              const unit = durationMatch[2]; // h, m, min
+              const durationMs = (unit.startsWith('h')) ? val * 3600000 : val * 60000;
+              end = new Date(start.getTime() + durationMs);
+            } else {
+              end = new Date(start.getTime() + 3600000); // 1h default
+            }
+          } else if (deadlineMatch) {
+            // Caso: "até às 10h" (Prazo)
+            end = extractTime(deadlineMatch[1], targetDate);
+            // Início é o momento da criação da tarefa (ou agora, se não tiver createdAt)
+            const created = task.createdAt ? new Date(task.createdAt) : new Date();
+            // Se a criação foi antes de hoje, usa start como "agora" ou início do dia alvo?
+            // Regra do usuário: "período vai ser do horário que foi criado a tarefa até a 10"
+            start = created;
+            
+            // Ajuste: Se o prazo é amanhã, o evento atravessa a meia-noite (multi-dia)
+          }
+
+          if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+             tasksToExport.push({
+               text: task.text,
+               start: start,
+               end: end
+             });
+          }
         });
       }
     });
 
-    if (tasksToProcess.length === 0) {
-      setError("Nenhuma tarefa pendente para exportar.");
-      return;
+    if (tasksToExport.length > 0) {
+      generateCalendarFile(tasksToExport);
+    } else {
+      setError("Nenhuma tarefa com horário identificado encontrada (ex: 'às 14h', 'até às 10h', 'amanhã às 15h').");
+      setTimeout(() => setError(null), 4000);
     }
-
-    setIsExportingCalendar(true);
-    setError(null);
-
-    const nowISO = new Date().toISOString();
-    const systemPrompt = `Você é um assistente de agendamento.
-    Hoje é: ${nowISO} (Data ISO).
-    Analise a lista de tarefas do usuário. Identifique quais possuem intenção de data/hora.
-    Se a tarefa tiver duração (ex: '2h', '30min'), calcule o fim. Se não tiver, assuma 1h.
-    Se for um prazo ('até 10h'), o início é AGORA e o fim é o prazo.
-    Retorne APENAS um JSON Array válido. Sem markdown.
-    Formato do objeto: { "summary": "Título", "dtStart": "ISO String", "dtEnd": "ISO String" }
-    Ignore tarefas sem indicação temporal.`;
-
-    const userQuery = `Tarefas:\n${tasksToProcess.join('\n')}`;
-
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: userQuery }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
-
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-
-      const jsonString = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      const events = JSON.parse(jsonString);
-
-      if (events && events.length > 0) {
-        generateCalendarFile(events);
-      } else {
-        setError("Nenhuma tarefa com data/horário foi identificada pela IA.");
-        setTimeout(() => setError(null), 4000);
-      }
-
-    } catch (err) {
-      console.error("Erro Calendar IA:", err);
-      setError(`Erro na exportação: ${err.message}`);
-    } finally {
-      setIsExportingCalendar(false);
-      setIsSidebarOpen(false);
-    }
+    
+    setIsSidebarOpen(false);
   };
 
   const handleLogin = async () => {
@@ -565,11 +608,9 @@ export default function App() {
           
           <button 
             onClick={handleExportToCalendar}
-            disabled={isExportingCalendar}
-            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all text-sm shadow-md active:scale-95 ${isExportingCalendar ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-white hover:bg-slate-900'}`}
+            className="w-full flex items-center justify-center gap-2 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all text-sm shadow-md active:scale-95"
           >
-            {isExportingCalendar ? <Loader2 size={18} className="animate-spin" /> : <Calendar size={18} />}
-            {isExportingCalendar ? "Processando..." : "Carregar na Agenda"}
+            <Calendar size={18} /> Carregar na Agenda
           </button>
 
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"><Plus size={18} /> Novo Documento</button>

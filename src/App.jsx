@@ -32,7 +32,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -43,6 +43,44 @@ const GoogleIcon = () => (
     <path fill="none" d="M0 0h48v48H0z"/>
   </svg>
 );
+
+// --- UTILITÁRIO DE ÁUDIO ---
+// Converte os dados brutos PCM da IA em um arquivo WAV tocável
+const pcmToWav = (pcmData, sampleRate = 24000) => {
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcmData.length;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  // Escreve cabeçalho WAV
+  const writeString = (view, offset, string) => {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  };
+
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  // Escreve os dados
+  const pcmBytes = new Uint8Array(pcmData);
+  const wavBytes = new Uint8Array(buffer, 44);
+  wavBytes.set(pcmBytes);
+
+  return buffer;
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -193,23 +231,29 @@ export default function App() {
 
       const audioContent = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (audioContent) {
+        // Decodificação Base64
         const binaryString = window.atob(audioContent);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
         for (let i = 0; i < len; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        const blob = new Blob([bytes.buffer], { type: 'audio/wav' });
+        
+        // CORREÇÃO CRUCIAL: Adicionar cabeçalho WAV aos dados PCM
+        const wavBuffer = pcmToWav(bytes); 
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
-        // Toca automaticamente quando pronto
+        
+        // Toca automaticamente
         const audio = new Audio(url);
         audioRef.current = audio;
         audio.onended = () => setIsPlaying(false);
-        audio.play();
+        audio.play().catch(e => console.error("Autoplay bloqueado:", e));
         setIsPlaying(true);
       } else {
-        throw new Error("Áudio não gerado.");
+        throw new Error("Áudio não gerado pela IA.");
       }
 
     } catch (err) {

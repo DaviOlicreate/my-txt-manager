@@ -3,7 +3,7 @@ import {
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
   User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
-  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo
+  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo, Calendar
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -32,7 +32,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -77,6 +77,35 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   wavBytes.set(pcmBytes);
 
   return buffer;
+};
+
+// --- UTILITÁRIOS DE AGENDA (.ICS) ---
+const formatICSDate = (date) => {
+  return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+};
+
+const generateCalendarFile = (tasks) => {
+  let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//TXT Manager//PT\n";
+  
+  tasks.forEach(task => {
+    icsContent += "BEGIN:VEVENT\n";
+    icsContent += `SUMMARY:${task.text}\n`;
+    icsContent += `DTSTART:${formatICSDate(task.start)}\n`;
+    icsContent += `DTEND:${formatICSDate(task.end)}\n`;
+    icsContent += `DESCRIPTION:Gerado pelo TXT Manager\n`;
+    icsContent += "END:VEVENT\n";
+  });
+  
+  icsContent += "END:VCALENDAR";
+  
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'tarefas_agenda.ics');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 export default function App() {
@@ -329,6 +358,79 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
+  const handleExportToCalendar = () => {
+    const tasksToExport = [];
+    const now = new Date();
+
+    files.forEach(file => {
+      if (file.tasks && file.tasks.length > 0) {
+        file.tasks.forEach(task => {
+          if (task.completed) return; // Opcional: não exportar completadas
+
+          const text = task.text.toLowerCase();
+          let start = null;
+          let end = null;
+          let created = task.createdAt ? new Date(task.createdAt) : new Date(); // Fallback para agora se não tiver createdAt
+
+          // 1. Detectar "até às HH:mm" (Fim definido, Início = Criação)
+          const matchAte = text.match(/até (?:[àa]s )?(\d{1,2})(?:[:h](\d{2}))?/);
+          
+          // 2. Detectar "às HH:mm" (Início definido, Fim = Início + Duração ou 1h)
+          const matchAs = text.match(/(?:^|\s)às (\d{1,2})(?:[:h](\d{2}))?/);
+          
+          // 3. Detectar duração "duração de Xh"
+          const matchDuracao = text.match(/duração (?:de )?(\d+)\s*(h|m|min)/);
+
+          if (matchAte) {
+            // Caso: Prazo final (Período: Criação -> Hora limite)
+            start = created;
+            end = new Date();
+            end.setHours(parseInt(matchAte[1]), parseInt(matchAte[2] || '0'), 0, 0);
+            
+            // Se o horário final já passou hoje, assume amanhã? 
+            // Para simplificar, assume o dia atual. Se start > end, ajusta end para amanhã.
+            if (start > end) end.setDate(end.getDate() + 1);
+
+          } else if (matchAs) {
+            // Caso: Evento agendado (Início -> Fim)
+            start = new Date();
+            start.setHours(parseInt(matchAs[1]), parseInt(matchAs[2] || '0'), 0, 0);
+            
+            // Duração padrão 1h ou detectada
+            let durationMinutes = 60;
+            if (matchDuracao) {
+              const value = parseInt(matchDuracao[1]);
+              const unit = matchDuracao[2];
+              if (unit === 'h') durationMinutes = value * 60;
+              else durationMinutes = value;
+            }
+            
+            end = new Date(start.getTime() + durationMinutes * 60000);
+          }
+
+          if (start && end) {
+            tasksToExport.push({
+              text: task.text,
+              start: start,
+              end: end
+            });
+          }
+        });
+      }
+    });
+
+    if (tasksToExport.length > 0) {
+      generateCalendarFile(tasksToExport);
+      // Feedback visual opcional
+      // alert(`${tasksToExport.length} tarefas exportadas para a agenda!`);
+    } else {
+      setError("Nenhuma tarefa com horário identificado encontrada (ex: 'às 14h', 'até às 10h').");
+      setTimeout(() => setError(null), 4000);
+    }
+    
+    setIsSidebarOpen(false);
+  };
+
   const handleLogin = async () => {
     try { setError(null); await signInWithPopup(auth, googleProvider); } 
     catch (err) { setError(err.message); }
@@ -379,7 +481,13 @@ export default function App() {
 
   const addTask = async () => {
     if (!newTaskText.trim() || !activeFile) return;
-    const updatedTasks = [...(activeFile.tasks || []), { id: crypto.randomUUID(), text: newTaskText, completed: false }];
+    // Modified to include createdAt for calendar logic
+    const updatedTasks = [...(activeFile.tasks || []), { 
+      id: crypto.randomUUID(), 
+      text: newTaskText, 
+      completed: false,
+      createdAt: Date.now() 
+    }];
     await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: updatedTasks });
     setNewTaskText('');
   };
@@ -456,6 +564,13 @@ export default function App() {
             {isGenerating ? "Gerando..." : (aiSummary ? "Ver Resumo do Dia" : "Resumo do Dia (IA)")}
           </button>
           
+          <button 
+            onClick={handleExportToCalendar}
+            className="w-full flex items-center justify-center gap-2 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all text-sm shadow-md active:scale-95"
+          >
+            <Calendar size={18} /> Carregar na Agenda
+          </button>
+
           <button onClick={() => setShowNewFileDialog(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"><Plus size={18} /> Novo Documento</button>
 
           <label className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-500 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-all text-xs cursor-pointer">

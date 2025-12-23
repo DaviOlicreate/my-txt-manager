@@ -3,7 +3,8 @@ import {
   FileText, Plus, Upload, Trash2, Save, CheckSquare, Square, Edit3, X,
   CheckCircle2, Clock, Cloud, Database, AlertCircle, CheckCircle, LogOut,
   User, ExternalLink, Sparkles, Brain, Loader2, ChevronLeft, RefreshCw, 
-  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo, Calendar, Check
+  BookOpen, Play, Pause, Volume2, Menu, PenTool, ListTodo, Calendar, Check,
+  MessageCircle, Settings, Layout
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -27,8 +28,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// CONFIGURAÇÃO DO PROVEDOR GOOGLE COM ESCOPO DE AGENDA
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
 
@@ -36,7 +35,7 @@ const PROJECT_ID = 'my-txt-manager';
 
 // ATENÇÃO: Para o Vercel, descomente a primeira linha e comente a segunda.
 // const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";  
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const GoogleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 48 48">
@@ -48,7 +47,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// --- UTILITÁRIO DE ÁUDIO ---
+// --- UTILITÁRIOS DE ÁUDIO ---
 const pcmToWav = (pcmData, sampleRate = 24000) => {
   const numChannels = 1;
   const bitsPerSample = 16;
@@ -57,46 +56,18 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   const dataSize = pcmData.length;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
-
-  const writeString = (view, offset, string) => {
-    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
-  };
-
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(view, 8, 'WAVE');
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataSize, true);
-
-  const pcmBytes = new Uint8Array(pcmData);
-  const wavBytes = new Uint8Array(buffer, 44);
-  wavBytes.set(pcmBytes);
-
+  const writeString = (view, offset, string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
+  writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); writeString(view, 36, 'data'); view.setUint32(40, dataSize, true);
+  const pcmBytes = new Uint8Array(pcmData); const wavBytes = new Uint8Array(buffer, 44); wavBytes.set(pcmBytes);
   return buffer;
 };
 
-// --- UTILITÁRIOS DE AGENDA (.ICS - CORRIGIDO PARA HORA LOCAL) ---
+// --- UTILITÁRIOS DE AGENDA (.ICS) ---
 const formatICSDateLocal = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
   const pad = (n) => String(n).padStart(2, '0');
-  
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
-  
-  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 };
 
 const generateCalendarFile = (events) => {
@@ -133,14 +104,21 @@ export default function App() {
   const [successMsg, setSuccessMsg] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
+  // Estados de Interface
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState('editor');
-  
   const [currentView, setCurrentView] = useState('files');
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  
+  // Estados de Configuração do Usuário (Monday & WhatsApp)
+  const [userSettings, setUserSettings] = useState({ whatsapp: '', mondayKey: '', mondayBoardId: '' });
+  
+  // Estados de IA e Áudio
   const [aiSummary, setAiSummary] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [isExportingCalendar, setIsExportingCalendar] = useState(false);
+  const [isSyncingMonday, setIsSyncingMonday] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(null);
@@ -158,19 +136,32 @@ export default function App() {
     }
   }, []);
 
+  // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setIsLoadingAuth(false);
+      if (currentUser) {
+        const savedToken = sessionStorage.getItem('googleCalendarToken');
+        if (savedToken) setGoogleAccessToken(savedToken);
+        
+        // Verificar se usuário tem configurações (WhatsApp/Monday)
+        const settingsRef = doc(db, 'app-data', PROJECT_ID, 'users', currentUser.uid, 'settings', 'profile');
+        const docSnap = await getDoc(settingsRef);
+        if (docSnap.exists()) {
+          setUserSettings(docSnap.data());
+        } else {
+          // Se não tem configurações, abre o modal de onboarding
+          setShowOnboarding(true);
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
 
+  // Firestore Sync
   useEffect(() => {
-    if (!user) {
-      setFiles([]);
-      return;
-    }
+    if (!user) { setFiles([]); return; }
     const filesRef = collection(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files');
     const unsubscribe = onSnapshot(filesRef, (snapshot) => {
       const filesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -184,9 +175,7 @@ export default function App() {
   const activeFile = files.find(f => f.id === activeFileId);
 
   useEffect(() => {
-    if (activeFile && !isTypingRef.current) {
-      setLocalContent(activeFile.content || '');
-    }
+    if (activeFile && !isTypingRef.current) setLocalContent(activeFile.content || '');
   }, [activeFileId, activeFile?.content]);
 
   useEffect(() => {
@@ -201,6 +190,79 @@ export default function App() {
     if (isPlaying) audioRef.current.pause();
     else audioRef.current.play();
     setIsPlaying(!isPlaying);
+  };
+
+  const saveSettings = async () => {
+    if (!user) return;
+    // Formatar WhatsApp para garantir formato internacional simples
+    let formattedPhone = userSettings.whatsapp.replace(/\D/g, ''); 
+    if (formattedPhone && !formattedPhone.startsWith('55') && formattedPhone.length <= 11) {
+       formattedPhone = '55' + formattedPhone; // Assume Brasil se não tiver DDI
+    }
+    
+    const newSettings = { ...userSettings, whatsapp: formattedPhone };
+    
+    await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'settings', 'profile'), newSettings);
+    setUserSettings(newSettings);
+    setShowOnboarding(false);
+    setSuccessMsg("Configurações salvas com sucesso!");
+    setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
+  // --- INTEGRAÇÃO MONDAY.COM ---
+  const handleSyncToMonday = async () => {
+    if (!activeFile) return;
+    if (!userSettings.mondayKey || !userSettings.mondayBoardId) {
+      setError("Configure sua API Key e Board ID do Monday nas configurações primeiro.");
+      setShowOnboarding(true);
+      return;
+    }
+    
+    setIsSyncingMonday(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    const query = `mutation {
+      create_item (board_id: ${userSettings.mondayBoardId}, item_name: "${activeFile.name}") {
+        id
+      }
+    }`;
+
+    try {
+      const response = await fetch("https://api.monday.com/v2", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': userSettings.mondayKey
+        },
+        body: JSON.stringify({ query })
+      });
+      
+      const data = await response.json();
+      if (data.errors) throw new Error(data.errors[0].message);
+      
+      setSuccessMsg(`Arquivo "${activeFile.name}" criado no Monday!`);
+    } catch (err) {
+      console.error(err);
+      setError(`Erro no Monday: ${err.message}`);
+    } finally {
+      setIsSyncingMonday(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // --- INTEGRAÇÃO WHATSAPP ---
+  const handleSendToWhatsApp = () => {
+    if (!aiSummary) return;
+    if (!userSettings.whatsapp) {
+      setError("Cadastre seu WhatsApp nas configurações para enviar.");
+      setShowOnboarding(true);
+      return;
+    }
+
+    const textEncoded = encodeURIComponent(`*Resumo do Dia (TXT Manager)*\n\n${aiSummary}`);
+    const url = `https://wa.me/${userSettings.whatsapp}?text=${textEncoded}`;
+    window.open(url, '_blank');
   };
 
   const checkAndTriggerAutoSummary = async (currentFiles, isInitialLoad = false) => {
@@ -219,7 +281,7 @@ export default function App() {
   };
 
   const generateAudio = async (text) => {
-    if (!text || !apiKey) return;
+    if (!text || !apiKey) { setError("Erro: Chave de API necessária."); return; }
     setIsGeneratingAudio(true);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     setAudioUrl(null);
@@ -228,10 +290,7 @@ export default function App() {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: text }] }],
-          generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } }
-        })
+        body: JSON.stringify({ contents: [{ parts: [{ text: text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } })
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
@@ -249,7 +308,10 @@ export default function App() {
         audio.play().catch(e => console.error(e));
         setIsPlaying(true);
       }
-    } catch (err) { setError(`Erro áudio: ${err.message}`); } 
+    } catch (err) { 
+       if (err.message.includes("Quota")) setError("Cota de áudio excedida. Aguarde 1 min.");
+       else setError(`Erro áudio: ${err.message}`); 
+    } 
     finally { setIsGeneratingAudio(false); }
   };
 
@@ -263,11 +325,10 @@ export default function App() {
       const tasks = f.tasks?.map(t => `[${t.completed ? 'Feito' : 'Pendente'}] ${t.text}`).join(', ') || 'Nenhuma';
       return `Arquivo: ${f.name}\n${f.content}\nTarefas: ${tasks}`;
     }).join('\n---\n');
-    const systemPrompt = "Você é um mentor de produtividade. Crie um 'Resumo da Manhã' conciso. Saudação, tópicos principais, pendências urgentes e dica do dia. Use Markdown.";
+    const systemPrompt = "Você é um mentor. Crie um 'Resumo da Manhã' conciso. Saudação, tópicos principais, pendências urgentes e dica. Use Markdown.";
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: `Dados:\n${allContent}\n\nFaça o resumo.` }] }], systemInstruction: { parts: [{ text: systemPrompt }] } })
       });
       const data = await response.json();
@@ -280,163 +341,61 @@ export default function App() {
   };
 
   const handleSidebarSummaryClick = () => {
-    if (aiSummary) setCurrentView('ai-summary');
-    else generateAISummary(files, false);
+    setCurrentView('ai-summary');
+    if (!aiSummary && !isGenerating && files.length > 0) generateAISummary(files, false);
     setIsSidebarOpen(false);
   };
 
   const handleExportToCalendar = async () => {
     if (!apiKey) { setError("Erro: Chave de API necessária."); return; }
-    
-    // Filtra tarefas não completadas E que ainda não foram exportadas
     const tasksToProcess = [];
-    files.forEach(f => {
-      if (f.tasks) {
-        f.tasks.forEach(t => {
-          if (!t.completed && !t.exportedToCalendar) {
-            tasksToProcess.push({
-              text: t.text,
-              id: t.id,
-              fileId: f.id
-            });
-          }
-        });
-      }
-    });
-
-    if (tasksToProcess.length === 0) {
-      setError("Todas as tarefas pendentes já foram exportadas ou não há novas tarefas.");
-      return;
-    }
-
-    setIsExportingCalendar(true);
-    setError(null);
-    setSuccessMsg(null);
-
+    files.forEach(f => f.tasks?.forEach(t => !t.completed && !t.exportedToCalendar && tasksToProcess.push({ text: t.text, id: t.id, fileId: f.id })));
+    if (tasksToProcess.length === 0) { setError("Nenhuma tarefa nova para exportar."); return; }
+    setIsExportingCalendar(true); setError(null); setSuccessMsg(null);
     const nowLocal = new Date().toString(); 
-    
-    const systemPrompt = `Você é um assistente de agendamento.
-    Data/Hora atual do usuário (com fuso): ${nowLocal}.
-    
-    Analise as tarefas. Identifique a intenção de data e hora.
-    Regras de Fuso Horário (CRÍTICO):
-    1. Retorne as datas no formato ISO 8601 COM O OFFSET DE FUSO CORRETO baseado na data atual fornecida.
-    2. NÃO converta para UTC (Z) se não for o fuso local.
-
-    Regras de Negócio:
-    - Se tiver duração (ex: '2h'), calcule o fim.
-    - Se não tiver duração, assuma 1h.
-    - Se for prazo ('até 10h'), início é agora e fim é o prazo.
-    
-    Retorne JSON Array: { "taskId": "ID_DA_TAREFA", "summary": "Título", "dtStart": "ISO String com Offset", "dtEnd": "ISO String com Offset" }.
-    IMPORTANTE: Retorne o "taskId" fornecido na entrada para cada evento.
-    Ignore tarefas sem indicação temporal.`;
-
-    // Envia o ID junto com o texto para a IA
+    const systemPrompt = `Hoje é ${nowLocal}. Analise as tarefas, identifique data/hora. Retorne ISO 8601 COM OFFSET CORRETO. JSON Array: { "taskId": "ID", "summary": "Título", "dtStart": "ISO", "dtEnd": "ISO" }.`;
     const queryText = tasksToProcess.map(t => `ID: ${t.id} | Tarefa: ${t.text}`).join('\n');
-
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: queryText }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { responseMimeType: "application/json" }
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: queryText }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } })
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
-      
       const events = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
-
-      if (!events || events.length === 0) {
-        setError("Nenhuma tarefa com horário encontrada pela IA.");
-      } else {
+      if (!events || events.length === 0) { setError("Nenhuma tarefa com horário."); } else {
         if (googleAccessToken) {
-          let addedCount = 0;
-          const successfulTaskIds = [];
-
+          let addedCount = 0; const successfulTaskIds = [];
           for (const evt of events) {
              try {
                await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-                 method: 'POST',
-                 headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                   summary: evt.summary,
-                   start: { dateTime: evt.dtStart },
-                   end: { dateTime: evt.dtEnd }
-                 })
+                 method: 'POST', headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ summary: evt.summary, start: { dateTime: evt.dtStart }, end: { dateTime: evt.dtEnd } })
                });
-               addedCount++;
-               if (evt.taskId) successfulTaskIds.push(evt.taskId);
-             } catch (e) { console.error("Falha API Calendar:", e); }
+               addedCount++; if (evt.taskId) successfulTaskIds.push(evt.taskId);
+             } catch (e) { console.error(e); }
           }
-          
-          // MARCAR TAREFAS COMO EXPORTADAS NO FIREBASE PARA EVITAR DUPLICIDADE
           if (successfulTaskIds.length > 0) {
-            // Agrupar IDs por arquivo para minimizar escritas
-            const updatesByFile = {};
-            successfulTaskIds.forEach(taskId => {
-               const originalTask = tasksToProcess.find(t => t.id === taskId);
-               if (originalTask) {
-                 if (!updatesByFile[originalTask.fileId]) updatesByFile[originalTask.fileId] = [];
-                 updatesByFile[originalTask.fileId].push(taskId);
-               }
-            });
-
-            for (const [fileId, taskIds] of Object.entries(updatesByFile)) {
-               const fileDocRef = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fileId);
-               const fileSnapshot = await getDoc(fileDocRef);
-               if (fileSnapshot.exists()) {
-                 const fileData = fileSnapshot.data();
-                 const updatedTasks = fileData.tasks.map(t => 
-                   taskIds.includes(t.id) ? { ...t, exportedToCalendar: true } : t
-                 );
-                 await updateDoc(fileDocRef, { tasks: updatedTasks });
-               }
+            const updates = {};
+            successfulTaskIds.forEach(id => { const t = tasksToProcess.find(x => x.id === id); if(t) { if(!updates[t.fileId]) updates[t.fileId]=[]; updates[t.fileId].push(id); }});
+            for (const [fid, tids] of Object.entries(updates)) {
+               const ref = doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', fid);
+               const snap = await getDoc(ref);
+               if(snap.exists()) await updateDoc(ref, { tasks: snap.data().tasks.map(t => tids.includes(t.id) ? { ...t, exportedToCalendar: true } : t) });
             }
           }
-
-          setSuccessMsg(`${addedCount} eventos novos adicionados à agenda!`);
-        } else {
-          generateCalendarFile(events);
-          setSuccessMsg("Arquivo de agenda gerado! (Modo offline)");
-        }
+          setSuccessMsg(`${addedCount} eventos adicionados!`);
+        } else { generateCalendarFile(events); setSuccessMsg("Arquivo ICS gerado!"); }
       }
     } catch (err) { setError(`Erro exportação: ${err.message}`); } 
     finally { setIsExportingCalendar(false); setIsSidebarOpen(false); setTimeout(() => setSuccessMsg(null), 5000); }
   };
 
-  const handleLogin = async () => {
-    try { 
-      setError(null); 
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential) setGoogleAccessToken(credential.accessToken);
-    } 
-    catch (err) { setError(err.message); }
-  };
-
-  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); setGoogleAccessToken(null); });
-
-  // Funções CRUD (createNewFile, etc) mantidas iguais...
-  const createNewFile = async (name) => {
-    if (!user || !name) return;
-    const id = crypto.randomUUID();
-    await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id), {
-      name: name.endsWith('.txt') ? name : `${name}.txt`, content: "", tasks: [], createdAt: Date.now(), updatedAt: Date.now()
-    });
-    setActiveFileId(id); setShowNewFileDialog(false); setNewFileName(''); setCurrentView('files'); setIsSidebarOpen(false);
-  };
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0]; if(!file) return;
-    const r = new FileReader(); r.onload = (ev) => createNewFile(file.name, ev.target.result); r.readAsText(file); e.target.value = null;
-  };
-  const updateFileContent = async (c) => { 
-    if (!user || !activeFileId) return; setLocalContent(c); 
-    await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { content: c, updatedAt: Date.now() }); 
-  };
+  const handleLogin = async () => { try { setError(null); const result = await signInWithPopup(auth, googleProvider); const c = GoogleAuthProvider.credentialFromResult(result); if(c) { setGoogleAccessToken(c.accessToken); sessionStorage.setItem('googleCalendarToken', c.accessToken); }} catch (err) { setError(err.message); } };
+  const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); setGoogleAccessToken(null); sessionStorage.removeItem('googleCalendarToken'); });
+  const createNewFile = async (name) => { if (!user || !name) return; const id = crypto.randomUUID(); await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id), { name: name.endsWith('.txt') ? name : `${name}.txt`, content: "", tasks: [], createdAt: Date.now(), updatedAt: Date.now() }); setActiveFileId(id); setShowNewFileDialog(false); setNewFileName(''); setCurrentView('files'); setIsSidebarOpen(false); };
+  const handleFileUpload = (e) => { const file = e.target.files[0]; if(!file) return; const r = new FileReader(); r.onload = (ev) => createNewFile(file.name, ev.target.result); r.readAsText(file); e.target.value = null; };
+  const updateFileContent = async (c) => { if (!user || !activeFileId) return; setLocalContent(c); await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { content: c, updatedAt: Date.now() }); };
   const deleteFile = async (id) => { await deleteDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id)); if(activeFileId === id) setActiveFileId(null); };
   const addTask = async () => { if(!newTaskText.trim()) return; await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: [...(activeFile.tasks||[]), { id: crypto.randomUUID(), text: newTaskText, completed: false }] }); setNewTaskText(''); };
   const toggleTask = async (id) => { await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: activeFile.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t) }); };
@@ -451,17 +410,7 @@ export default function App() {
         <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3" style={{ width: '6rem', height: '6rem', backgroundColor: '#4f46e5', borderRadius: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem auto' }}><FileText size={48} color="white" /></div>
         <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
         <p className="text-slate-500 mb-10 text-lg" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
-        
-        {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex gap-2" style={{ backgroundColor: '#fef2f2', color: '#dc2626', padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem', textAlign: 'left', border: '1px solid #fee2e2', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <AlertCircle size={14} /><span>{error}</span>
-          </div>
-        )}
-
-        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', cursor: 'pointer' }}>
-          <GoogleIcon /> <span style={{ color: '#334155', fontWeight: 'bold', fontSize: '16px' }}>Entrar com conta Google</span>
-        </button>
-
+        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', cursor: 'pointer' }}><GoogleIcon /> <span style={{ color: '#334155', fontWeight: 'bold', fontSize: '16px' }}>Entrar com conta Google</span></button>
         <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
       </div>
     </div>
@@ -469,11 +418,41 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
+      
+      {/* MODAL ONBOARDING / SETTINGS */}
+      {showOnboarding && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl border border-slate-100 relative">
+            <button onClick={() => setShowOnboarding(false)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20} /></button>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Configurar Perfil</h3>
+            <p className="text-sm text-slate-500 mb-6">Preencha para ativar integrações.</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">WhatsApp (com DDD)</label>
+                <input type="text" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="11999999999" value={userSettings.whatsapp} onChange={e => setUserSettings({...userSettings, whatsapp: e.target.value})} />
+                <p className="text-[10px] text-slate-400 mt-1">Digite apenas números. Ex: 11988887777</p>
+              </div>
+              <div className="pt-4 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monday API Key</label>
+                <input type="password" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Cole sua chave aqui" value={userSettings.mondayKey} onChange={e => setUserSettings({...userSettings, mondayKey: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monday Board ID</label>
+                <input type="text" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Ex: 123456789" value={userSettings.mondayBoardId} onChange={e => setUserSettings({...userSettings, mondayBoardId: e.target.value})} />
+              </div>
+            </div>
+            
+            <button onClick={saveSettings} className="w-full mt-8 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl active:scale-95 transition-all">Salvar Configurações</button>
+          </div>
+        </div>
+      )}
+
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
       <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 md:shadow-sm md:w-80 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
-          <div className="flex-1 overflow-hidden"><h1 className="text-sm font-bold truncate">{user.displayName}</h1><button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline">Sair</button></div>
+          <div className="flex-1 overflow-hidden"><h1 className="text-sm font-bold truncate">{user.displayName}</h1><button onClick={() => setShowOnboarding(true)} className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"><Settings size={10} /> Configurar</button></div>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
         <div className="p-4 space-y-2 border-b border-slate-50">
@@ -511,6 +490,10 @@ export default function App() {
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                   <div className="flex items-center gap-4"><div className="w-12 h-12 md:w-20 md:h-20 bg-indigo-600 text-white rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-xl -rotate-3"><Brain size={24} className="md:w-10 md:h-10" /></div><div><h2 className="text-xl md:text-3xl font-black text-slate-800">Resumo do Dia</h2><p className="text-slate-400 font-medium italic mt-1 text-xs md:text-base">Análise inteligente automatizada</p></div></div>
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    {/* BOTÃO WHATSAPP */}
+                    {aiSummary && userSettings.whatsapp && (
+                       <button onClick={handleSendToWhatsApp} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors bg-emerald-500 text-white hover:bg-emerald-600"><MessageCircle size={14} /> WhatsApp</button>
+                    )}
                     {audioUrl && <button onClick={toggleAudio} disabled={isGeneratingAudio} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isPlaying ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>{isPlaying ? <><Pause size={14} /> Pausar</> : <><Volume2 size={14} /> Ouvir</>}</button>}
                     {!audioUrl && aiSummary && <button onClick={() => generateAudio(aiSummary)} disabled={isGeneratingAudio} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold">{isGeneratingAudio ? "Criando..." : "Criar Áudio"}</button>}
                     <button onClick={() => generateAISummary(files, true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold"><RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} /> Regenerar</button>
@@ -529,11 +512,16 @@ export default function App() {
                 <div className="flex items-center gap-3"><h2 className="text-lg md:text-xl font-bold text-slate-800 truncate">{activeFile.name}</h2><span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 rounded text-[10px] text-emerald-700 font-black uppercase tracking-tighter border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>Sincronizado</span></div>
                 <div className="flex items-center gap-3 mt-1.5"><div className="w-16 md:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[8px] md:text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}%</span></div>
               </div>
-              <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
+              <div className="flex items-center gap-2">
+                 <button onClick={handleSyncToMonday} disabled={isSyncingMonday} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all bg-blue-50 text-blue-600 hover:bg-blue-100" title="Enviar para Monday.com">
+                    {isSyncingMonday ? <Loader2 size={16} className="animate-spin" /> : <Layout size={16} />} 
+                    <span className="hidden md:inline">Monday</span>
+                 </button>
+                 <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
+              </div>
             </header>
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden h-full">
               <div className={`flex-1 p-4 md:p-8 overflow-hidden flex flex-col bg-white ${activeMobileTab === 'editor' ? 'flex' : 'hidden md:flex'}`}>
-                {/* INDICADOR DE EDITANDO REINSERIDO AQUI */}
                 <div className="mb-4 flex justify-between items-center shrink-0">
                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Editor</h3>
                   {isEditing && <span className="text-[10px] font-black text-amber-500 animate-pulse tracking-widest bg-amber-50 px-2 py-1 rounded">MODO DE EDIÇÃO</span>}

@@ -28,6 +28,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// CONFIGURAÇÃO DO PROVEDOR GOOGLE COM ESCOPO DE AGENDA
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
 
@@ -424,7 +426,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 text-slate-900 font-sans overflow-hidden fixed inset-0">
-      
       {/* MODAL ONBOARDING / SETTINGS */}
       {showOnboarding && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans animate-in fade-in">
@@ -432,14 +433,12 @@ export default function App() {
             <button onClick={() => setShowOnboarding(false)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20} /></button>
             <h3 className="text-2xl font-black text-slate-800 mb-2">Configurar Perfil</h3>
             <p className="text-sm text-slate-500 mb-6">Preencha para ativar integrações.</p>
-            
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">WhatsApp (com DDD)</label>
                 <input type="text" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="11999999999" value={userSettings.whatsapp} onChange={e => setUserSettings({...userSettings, whatsapp: e.target.value})} />
                 <p className="text-[10px] text-slate-400 mt-1">Digite apenas números. Ex: 11988887777</p>
               </div>
-              
               {hasMondayAccess && (
                 <>
                   <div className="pt-4 border-t border-slate-100">
@@ -453,7 +452,6 @@ export default function App() {
                 </>
               )}
             </div>
-            
             <button onClick={saveSettings} className="w-full mt-8 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl active:scale-95 transition-all">Salvar Configurações</button>
           </div>
         </div>
@@ -463,7 +461,13 @@ export default function App() {
       <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 md:shadow-sm md:w-80 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
-          <div className="flex-1 overflow-hidden"><h1 className="text-sm font-bold truncate">{user.displayName}</h1><button onClick={() => setShowOnboarding(true)} className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"><Settings size={10} /> Configurar</button></div>
+          <div className="flex-1 overflow-hidden">
+            <h1 className="text-sm font-bold truncate">{user.displayName}</h1>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowOnboarding(true)} className="text-[10px] text-slate-500 font-bold uppercase tracking-widest hover:text-indigo-600 flex items-center gap-1 transition-colors"><Settings size={10} /> Config</button>
+              <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline transition-colors">Sair</button>
+            </div>
+          </div>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
         <div className="p-4 space-y-2 border-b border-slate-50">

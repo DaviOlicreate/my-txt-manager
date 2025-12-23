@@ -402,6 +402,9 @@ export default function App() {
   const removeTask = async (id) => { await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { tasks: activeFile.tasks.filter(t => t.id !== id) }); };
   const calculateProgress = (f) => (!f.tasks || f.tasks.length === 0) ? 0 : Math.round((f.tasks.filter(t => t.completed).length / f.tasks.length) * 100);
 
+  // Check access to Monday settings
+  const hasMondayAccess = user && ['davioliccb@gmail.com', 'contato.davioliveira42@gmail.com'].includes(user.email);
+
   if (isLoadingAuth) return <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', position: 'fixed', inset: 0 }}><Loader2 className="animate-spin text-indigo-600" /></div>;
 
   if (!user) return (
@@ -410,7 +413,10 @@ export default function App() {
         <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3" style={{ width: '6rem', height: '6rem', backgroundColor: '#4f46e5', borderRadius: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem auto' }}><FileText size={48} color="white" /></div>
         <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight" style={{ fontSize: '2.25rem', fontWeight: 900, marginBottom: '1rem', color: '#1e293b' }}>TXT Manager</h1>
         <p className="text-slate-500 mb-10 text-lg" style={{ color: '#64748b', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: 1.625 }}>Organize suas notas e tarefas em qualquer lugar com segurança total.</p>
-        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', cursor: 'pointer' }}><GoogleIcon /> <span style={{ color: '#334155', fontWeight: 'bold', fontSize: '16px' }}>Entrar com conta Google</span></button>
+        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs mb-6 text-left border border-red-100 flex gap-2" style={{ backgroundColor: '#fef2f2', color: '#dc2626', padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem', textAlign: 'left', border: '1px solid #fee2e2', display: 'flex', gap: '0.5rem', alignItems: 'center' }}><AlertCircle size={14} className="mt-0.5" /><span>{error}</span></div>}
+        <button onClick={handleLogin} className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl font-bold hover:border-indigo-600 transition-all shadow-md active:scale-95 group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', width: '100%', padding: '1rem 1.5rem', backgroundColor: 'white', border: '2px solid #e2e8f0', borderRadius: '1rem', cursor: 'pointer' }}>
+          <GoogleIcon /> <span style={{ color: '#334155', fontWeight: 'bold', fontSize: '16px' }}>Entrar com conta Google</span>
+        </button>
         <p className="mt-8 text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]" style={{ marginTop: '2rem', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 900, color: '#94a3b8' }}>Acesso Multi-usuário</p>
       </div>
     </div>
@@ -433,14 +439,19 @@ export default function App() {
                 <input type="text" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="11999999999" value={userSettings.whatsapp} onChange={e => setUserSettings({...userSettings, whatsapp: e.target.value})} />
                 <p className="text-[10px] text-slate-400 mt-1">Digite apenas números. Ex: 11988887777</p>
               </div>
-              <div className="pt-4 border-t border-slate-100">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monday API Key</label>
-                <input type="password" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Cole sua chave aqui" value={userSettings.mondayKey} onChange={e => setUserSettings({...userSettings, mondayKey: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monday Board ID</label>
-                <input type="text" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Ex: 123456789" value={userSettings.mondayBoardId} onChange={e => setUserSettings({...userSettings, mondayBoardId: e.target.value})} />
-              </div>
+              
+              {hasMondayAccess && (
+                <>
+                  <div className="pt-4 border-t border-slate-100">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monday API Key</label>
+                    <input type="password" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Cole sua chave aqui" value={userSettings.mondayKey} onChange={e => setUserSettings({...userSettings, mondayKey: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monday Board ID</label>
+                    <input type="text" className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100" placeholder="Ex: 123456789" value={userSettings.mondayBoardId} onChange={e => setUserSettings({...userSettings, mondayBoardId: e.target.value})} />
+                  </div>
+                </>
+              )}
             </div>
             
             <button onClick={saveSettings} className="w-full mt-8 py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-2xl shadow-xl active:scale-95 transition-all">Salvar Configurações</button>
@@ -513,10 +524,13 @@ export default function App() {
                 <div className="flex items-center gap-3 mt-1.5"><div className="w-16 md:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${calculateProgress(activeFile)}%` }} /></div><span className="text-[8px] md:text-[10px] font-black text-indigo-600 uppercase tracking-widest">{calculateProgress(activeFile)}%</span></div>
               </div>
               <div className="flex items-center gap-2">
-                 <button onClick={handleSyncToMonday} disabled={isSyncingMonday} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all bg-blue-50 text-blue-600 hover:bg-blue-100" title="Enviar para Monday.com">
-                    {isSyncingMonday ? <Loader2 size={16} className="animate-spin" /> : <Layout size={16} />} 
-                    <span className="hidden md:inline">Monday</span>
-                 </button>
+                 {/* BOTAO MONDAY (CONDICIONAL) */}
+                 {hasMondayAccess && (
+                   <button onClick={handleSyncToMonday} disabled={isSyncingMonday} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all bg-blue-50 text-blue-600 hover:bg-blue-100" title="Enviar para Monday.com">
+                      {isSyncingMonday ? <Loader2 size={16} className="animate-spin" /> : <Layout size={16} />} 
+                      <span className="hidden md:inline">Monday</span>
+                   </button>
+                 )}
                  <button onClick={() => setIsEditing(!isEditing)} className={`flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-2xl text-xs md:text-sm font-bold transition-all shadow-md active:scale-95 ${isEditing ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{isEditing ? <><Save size={16}/> <span className="hidden md:inline">Salvar</span></> : <><Edit3 size={16}/> <span className="hidden md:inline">Editar</span></>}</button>
               </div>
             </header>

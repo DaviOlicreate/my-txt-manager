@@ -49,7 +49,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// --- UTILITÁRIOS DE ÁUDIO ---
+// --- UTILITÁRIO DE ÁUDIO ---
 const pcmToWav = (pcmData, sampleRate = 24000) => {
   const numChannels = 1;
   const bitsPerSample = 16;
@@ -58,9 +58,29 @@ const pcmToWav = (pcmData, sampleRate = 24000) => {
   const dataSize = pcmData.length;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
-  const writeString = (view, offset, string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
-  writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); writeString(view, 36, 'data'); view.setUint32(40, dataSize, true);
-  const pcmBytes = new Uint8Array(pcmData); const wavBytes = new Uint8Array(buffer, 44); wavBytes.set(pcmBytes);
+
+  const writeString = (view, offset, string) => {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  };
+
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const pcmBytes = new Uint8Array(pcmData);
+  const wavBytes = new Uint8Array(buffer, 44);
+  wavBytes.set(pcmBytes);
+
   return buffer;
 };
 
@@ -350,10 +370,15 @@ export default function App() {
 
   const handleExportToCalendar = async () => {
     if (!apiKey) { setError("Erro: Chave de API necessária."); return; }
+    
     const tasksToProcess = [];
     files.forEach(f => f.tasks?.forEach(t => !t.completed && !t.exportedToCalendar && tasksToProcess.push({ text: t.text, id: t.id, fileId: f.id })));
     if (tasksToProcess.length === 0) { setError("Nenhuma tarefa nova para exportar."); return; }
-    setIsExportingCalendar(true); setError(null); setSuccessMsg(null);
+
+    setIsExportingCalendar(true);
+    setError(null);
+    setSuccessMsg(null);
+
     const nowLocal = new Date().toString(); 
     const systemPrompt = `Hoje é ${nowLocal}. Analise as tarefas, identifique data/hora. Retorne ISO 8601 COM OFFSET CORRETO. JSON Array: { "taskId": "ID", "summary": "Título", "dtStart": "ISO", "dtEnd": "ISO" }.`;
     const queryText = tasksToProcess.map(t => `ID: ${t.id} | Tarefa: ${t.text}`).join('\n');
@@ -395,7 +420,20 @@ export default function App() {
 
   const handleLogin = async () => { try { setError(null); const result = await signInWithPopup(auth, googleProvider); const c = GoogleAuthProvider.credentialFromResult(result); if(c) { setGoogleAccessToken(c.accessToken); sessionStorage.setItem('googleCalendarToken', c.accessToken); }} catch (err) { setError(err.message); } };
   const handleLogout = () => signOut(auth).then(() => { setActiveFileId(null); setCurrentView('files'); setAiSummary(null); setAudioUrl(null); setGoogleAccessToken(null); sessionStorage.removeItem('googleCalendarToken'); });
-  const createNewFile = async (name) => { if (!user || !name) return; const id = crypto.randomUUID(); await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id), { name: name.endsWith('.txt') ? name : `${name}.txt`, content: "", tasks: [], createdAt: Date.now(), updatedAt: Date.now() }); setActiveFileId(id); setShowNewFileDialog(false); setNewFileName(''); setCurrentView('files'); setIsSidebarOpen(false); };
+  
+  // CORREÇÃO CRÍTICA AQUI: O payload do setDoc estava incorreto
+  const createNewFile = async (name, content = "") => {
+    if (!user || !name) return;
+    const id = crypto.randomUUID();
+    await setDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id), {
+      name: name.endsWith('.txt') ? name : `${name}.txt`, 
+      content: content, // Agora usa o conteúdo passado (que vem do FileReader)
+      tasks: [], 
+      createdAt: Date.now(), 
+      updatedAt: Date.now() 
+    });
+    setActiveFileId(id); setShowNewFileDialog(false); setNewFileName(''); setCurrentView('files'); setIsSidebarOpen(false);
+  };
   const handleFileUpload = (e) => { const file = e.target.files[0]; if(!file) return; const r = new FileReader(); r.onload = (ev) => createNewFile(file.name, ev.target.result); r.readAsText(file); e.target.value = null; };
   const updateFileContent = async (c) => { if (!user || !activeFileId) return; setLocalContent(c); await updateDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', activeFileId), { content: c, updatedAt: Date.now() }); };
   const deleteFile = async (id) => { await deleteDoc(doc(db, 'app-data', PROJECT_ID, 'users', user.uid, 'files', id)); if(activeFileId === id) setActiveFileId(null); };
@@ -461,14 +499,8 @@ export default function App() {
       <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 md:shadow-sm md:w-80 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" />
-          <div className="flex-1 overflow-hidden">
-            <h1 className="text-sm font-bold truncate">{user.displayName}</h1>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowOnboarding(true)} className="text-[10px] text-slate-500 font-bold uppercase tracking-widest hover:text-indigo-600 flex items-center gap-1 transition-colors"><Settings size={10} /> Config</button>
-              <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase tracking-widest hover:underline transition-colors">Sair</button>
-            </div>
-          </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600"><X size={20} /></button>
+          <div className="flex-1 overflow-hidden"><h1 className="text-sm font-bold truncate">{user.displayName}</h1><button onClick={() => setShowOnboarding(true)} className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"><Settings size={10} /> Config</button></div>
+          <button onClick={handleLogout} className="text-slate-400 hover:text-red-600"><LogOut size={20} /></button>
         </div>
         <div className="p-4 space-y-2 border-b border-slate-50">
           <button onClick={handleSidebarSummaryClick} disabled={files.length === 0 || isGenerating} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-[1.02]">
